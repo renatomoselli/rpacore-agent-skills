@@ -55,6 +55,8 @@ jobs:
           repository: renatomoselli/rpacore
           ref: ${{ steps.core.outputs.commit }}
           path: core-baseline
+          token: ${{ secrets.RPACORE_READ_TOKEN || github.token }}
+          persist-credentials: false
 
       - name: Validate immutable Core documentation targets
         run: python scripts/validate_skills.py --repo-root . --core-repo core-baseline

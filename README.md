@@ -61,6 +61,12 @@ The optional `--core-repo` check requires that checkout to be at the exact Core
 commit recorded by the manifest and proves that every linked documentation file
 exists there.
 
+The pinned-baseline CI job uses the repository's standard GitHub token when the
+Core repository is public. While Core is private, maintainers must configure an
+`RPACORE_READ_TOKEN` Actions secret containing a fine-grained token limited to
+that repository with read-only Contents access. The workflow does not persist
+the credential after checkout.
+
 ## Installation and distribution
 
 No supported installation channel exists yet. Git/project use, Pi/npm, Claude,

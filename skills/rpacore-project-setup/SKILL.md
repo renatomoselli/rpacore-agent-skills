@@ -5,9 +5,11 @@ description: Set up or upgrade a Python automation project with RPA Core. Use fo
 
 # Set up an RPA Core project
 
-Before changing the project, run `rpacore version` and confirm it satisfies the
-Core range in the repository's [`manifest.toml`](../../manifest.toml). Stop on a
-mismatch.
+For an existing project, run its environment's `rpacore version` before making
+changes and confirm it satisfies the Core range in the repository's
+[`manifest.toml`](../../manifest.toml). For a new project, install the approved
+source in the new environment first, then run the same check before scaffolding.
+Stop on a mismatch.
 
 Use the public
 [tutorial](https://github.com/renatomoselli/rpacore/blob/0a50fcfa31692232b4fe8807997ce026c1e26bf3/docs/tutorial.md),

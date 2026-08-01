@@ -29,7 +29,7 @@ sha256 = "d3a1177676a922d27916ff62969d1b90048b1a23b04fed8f5ff68479227dcaf8"
 [[skills]]
 name = "rpacore-project-setup"
 path = "skills/rpacore-project-setup/SKILL.md"
-sha256 = "407524ee2267b34370c838a0d84c530c8d51ee233d247aa63deefae7e7b23cda"
+sha256 = "37253ef67d5eb26219648223dacf01884c61891a8c099238c0e617b6869545a1"
 
 [[skills]]
 name = "rpacore-queue-processing"
