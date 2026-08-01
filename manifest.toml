@@ -1,0 +1,47 @@
+schema_version = 1
+companion_version = "0.1.0-dev.0"
+status = "development-only"
+license = "Apache-2.0"
+validation_python = ">=3.11"
+
+[core]
+version_spec = ">=0.3.0,<0.4.0"
+repository = "https://github.com/renatomoselli/rpacore"
+commit = "0a50fcfa31692232b4fe8807997ce026c1e26bf3"
+docs_base = "https://github.com/renatomoselli/rpacore/blob/0a50fcfa31692232b4fe8807997ce026c1e26bf3/docs"
+published_release = false
+
+[[skills]]
+name = "rpacore-automation-development"
+path = "skills/rpacore-automation-development/SKILL.md"
+sha256 = "88cfccab6ce2bdb32fc3ab92d0d48fa43db3c42ed7f42865cbf7fe4d2b26299e"
+
+[[skills]]
+name = "rpacore-diagnostics-inspection"
+path = "skills/rpacore-diagnostics-inspection/SKILL.md"
+sha256 = "6348e9051743a1d815f7016e86996cdd953868c38391350f391f0a617255640b"
+
+[[skills]]
+name = "rpacore-durability-recovery"
+path = "skills/rpacore-durability-recovery/SKILL.md"
+sha256 = "d3a1177676a922d27916ff62969d1b90048b1a23b04fed8f5ff68479227dcaf8"
+
+[[skills]]
+name = "rpacore-project-setup"
+path = "skills/rpacore-project-setup/SKILL.md"
+sha256 = "407524ee2267b34370c838a0d84c530c8d51ee233d247aa63deefae7e7b23cda"
+
+[[skills]]
+name = "rpacore-queue-processing"
+path = "skills/rpacore-queue-processing/SKILL.md"
+sha256 = "fb46f7abc38f7f36359df3a6eb7bd72a2525149e7ae3e93fee31820fbc265653"
+
+[[skills]]
+name = "rpacore-reporting-notifications"
+path = "skills/rpacore-reporting-notifications/SKILL.md"
+sha256 = "b370e02497946871edf075f56c31c93bab9e4cd5aff714fe50ff2d63cc8719a8"
+
+[[skills]]
+name = "rpacore-testing-review"
+path = "skills/rpacore-testing-review/SKILL.md"
+sha256 = "d69c3351ec3d7ed52c3d21174baed776fa6df3ed0306168003c9cc87bca6b253"

@@ -1,0 +1,60 @@
+name: Validate
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  portable-skills:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Validate skills
+        run: python scripts/validate_skills.py --repo-root .
+
+      - name: Run validator tests
+        run: python -m unittest discover -s tests -v
+
+  pinned-core-baseline:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Read the manifest-owned Core commit
+        id: core
+        shell: bash
+        run: |
+          commit="$(python -c "import tomllib; print(tomllib.load(open('manifest.toml', 'rb'))['core']['commit'])")"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the pinned Core baseline
+        uses: actions/checkout@v7
+        with:
+          repository: renatomoselli/rpacore
+          ref: ${{ steps.core.outputs.commit }}
+          path: core-baseline
+
+      - name: Validate immutable Core documentation targets
+        run: python scripts/validate_skills.py --repo-root . --core-repo core-baseline
