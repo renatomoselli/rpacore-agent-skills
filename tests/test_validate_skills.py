@@ -111,7 +111,7 @@ class ValidatorTests(unittest.TestCase):
     def test_mutable_main_documentation_link_is_rejected(self) -> None:
         skill = self.repo_root / "skills" / "rpacore-project-setup" / "SKILL.md"
         text = skill.read_text(encoding="utf-8").replace(
-            "blob/0a50fcfa31692232b4fe8807997ce026c1e26bf3/",
+            "blob/493252649ee6b9d387008e6b7ed41908e2733f46/",
             "blob/main/",
             1,
         )
@@ -191,16 +191,17 @@ class ValidatorTests(unittest.TestCase):
                 "validation_python must be >=3.11",
             ),
             (
-                'commit = "0a50fcfa31692232b4fe8807997ce026c1e26bf3"',
+                'commit = "493252649ee6b9d387008e6b7ed41908e2733f46"',
                 'commit = "not-a-commit"',
                 "commit must be 40 lowercase hexadecimal",
             ),
             (
-                "blob/0a50fcfa31692232b4fe8807997ce026c1e26bf3/docs",
+                "blob/493252649ee6b9d387008e6b7ed41908e2733f46/docs",
                 "blob/main/docs",
                 "docs_base must equal immutable baseline",
             ),
-            ("published_release = false", "published_release = true", "must be false"),
+            ('published_release = true', 'published_release = "yes"', "must be a boolean"),
+            ('version_spec = "==0.3.0"', 'version_spec = ">=0.3.0"', "one exact tested release"),
         )
         for old, new, expected in cases:
             with self.subTest(replacement=new):
@@ -254,7 +255,7 @@ class ValidatorTests(unittest.TestCase):
             ),
             (
                 "outside-baseline",
-                "https://github.com/renatomoselli/rpacore/blob/0a50fcfa31692232b4fe8807997ce026c1e26bf3/docs/tutorial.md",
+                "https://github.com/renatomoselli/rpacore/blob/493252649ee6b9d387008e6b7ed41908e2733f46/docs/tutorial.md",
                 "https://example.invalid/docs/tutorial.md",
                 "absolute link is outside manifest baseline",
             ),

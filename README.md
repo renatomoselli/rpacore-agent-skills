@@ -1,81 +1,80 @@
 # RPA Core Agent Skills
 
-Portable, task-focused guidance that helps coding agents build RPA Core
-automations with supported public contracts.
+Portable guidance for coding agents building RPA Core automations through
+supported public APIs.
 
-> [!WARNING]
-> This repository is a development-only foundation. It targets the unreleased
-> RPA Core `0.3.x` development line and has no supported package, plugin,
-> marketplace entry, or release. The latest published RPA Core version is not
-> compatible with these draft skills.
+This companion remains **development-only**, with no supported installation
+channel or companion release. Its selected Core baseline is the **released
+Core 0.3.0**, at commit
+493252649ee6b9d387008e6b7ed41908e2733f46. Compatibility currently means
+exactly 0.3.0; later versions need their own validation.
 
-## Purpose
+## Choose a workflow
 
-RPA Core's public documentation owns framework APIs and behavior. This
-repository owns concise agent workflows and high-risk guardrails. Skills link
-to one immutable Core documentation baseline instead of copying API tables,
-durability rules, or CLI references.
+| Request | Start with | Result to establish |
+| --- | --- | --- |
+| Design an automation from a business process | [Automation development](skills/rpacore-automation-development/SKILL.md) | Unit of work, execution mode, durable inputs, failure policy, completion evidence |
+| Adopt Core in an existing script | [Automation development](skills/rpacore-automation-development/SKILL.md) | Incremental conversion with business-output parity and explicit replay limits |
+| Create or upgrade a Core project | [Project setup](skills/rpacore-project-setup/SKILL.md) | Matching environment, current scaffold, or tested migration/rollback path |
+| Make work recoverable | [Durability and recovery](skills/rpacore-durability-recovery/SKILL.md) | Persisted recovery contract and effect-by-effect replay verification |
+| Build local queue processing | [Queue processing](skills/rpacore-queue-processing/SKILL.md) | Stable work identity, ownership, retries, and truthful acknowledgement |
+| Investigate a failed run | [Diagnostics and inspection](skills/rpacore-diagnostics-inspection/SKILL.md) | Bounded evidence answering a named operator question |
+| Publish reports or notifications | [Reporting and notifications](skills/rpacore-reporting-notifications/SKILL.md) | Output publication and delivery truth without unnecessary sensitive data |
+| Test or review an automation | [Testing and review](skills/rpacore-testing-review/SKILL.md) | Evidence for the requested scope; a broad review also evaluates useful improvements |
 
-The skills cannot change automation runtime behavior. They install no Python
-package and include no hooks, lifecycle scripts, MCP server, credentials,
-telemetry, Cloud access, runtime AI, or pre-authorized tool permissions.
+Use the relevant route for the request. A small change need not run every
+workflow, and a narrow defect review need not become product discovery.
 
-## Skills
+## Source and compatibility
 
-- `rpacore-project-setup`
-- `rpacore-automation-development`
-- `rpacore-durability-recovery`
-- `rpacore-queue-processing`
-- `rpacore-diagnostics-inspection`
-- `rpacore-reporting-notifications`
-- `rpacore-testing-review`
+The seven directories under skills/ are the single editable instruction source.
+Core public documentation owns API and runtime semantics; skills link to the
+immutable documentation baseline recorded in [manifest.toml](manifest.toml).
+Keep the manifest with the source tree when inspecting or evaluating it.
+Copying an isolated skill directory loses its relative compatibility reference.
 
-Each directory under `skills/` is the only editable source for that skill.
-Future harness packages may wrap this tree but must not maintain copied bodies.
-The repository follows the open
-[Agent Skills specification](https://agentskills.io/specification).
+Before using a skill, compare rpacore version with the manifest. Version text
+alone is not consumer proof: the maintainer checks also compare a wheel's
+Python files with the selected commit and its installed bytes with that wheel.
+The Core published_release flag is independent of companion development status.
 
-## Compatibility and provenance
+Future harness packages may wrap this tree, preserving its manifest and links,
+but must not maintain edited copies. Git/project use, Pi/npm, Claude, Codex,
+OpenCode, and GitHub Copilot are independent future distribution decisions.
+A local validation result does not establish support for any of them.
 
-[`manifest.toml`](manifest.toml) records the companion version, development
-status, supported Core range, exact Core commit, immutable documentation base,
-and SHA-256 for every skill. Before using a skill, run `rpacore version` and
-confirm that it satisfies the manifest's supported range.
+## Maintainer validation
 
-The current Core baseline is intentionally a development commit, not a release
-tag. Promotion or release requires replacing it with the explicitly selected
-tag/commit and revalidating every skill and documentation target.
-
-## Validation
-
-Python 3.11 or newer is required only for repository validation:
+Python 3.11+ is required for repository tooling. From this repository:
 
 ```powershell
-python scripts\validate_skills.py --repo-root .
-python scripts\validate_skills.py --repo-root . --core-repo ..\rpacore
+python scripts/validate_skills.py --repo-root .
 python -m unittest discover -s tests -v
 git diff --check
 ```
 
-The optional `--core-repo` check requires that checkout to be at the exact Core
-commit recorded by the manifest and proves that every linked documentation file
-exists there.
+After reviewing a skill edit, regenerate only its manifest hash:
 
-The pinned-baseline CI job uses the repository's standard GitHub token when the
-Core repository is public. While Core is private, maintainers must configure an
-`RPACORE_READ_TOKEN` Actions secret containing a fine-grained token limited to
-that repository with read-only Contents access. The workflow does not persist
-the credential after checkout.
+```powershell
+python scripts/validate_skills.py --repo-root . --write
+```
 
-## Installation and distribution
+All structural, content, and link rules still apply in write mode. Invalid
+content is rejected before the manifest changes. Preserve
+`* text=auto eol=lf` in .gitattributes: hashes cover actual UTF-8/LF skill bytes,
+and the tool does not silently rewrite CRLF files.
 
-No supported installation channel exists yet. Git/project use, Pi/npm, Claude,
-Codex, OpenCode, and GitHub Copilot distribution are separate future decisions
-that require target-specific validation. Do not infer support from a shared
-directory convention.
+Use the [maintainer guide](docs/maintaining.md) for exact-baseline checks,
+installed-wheel consumer scenarios, evidence receipts, and baseline updates.
+The [evaluation cases](docs/evaluation-cases.md) distinguish executable
+reference consumers from actual agent-output evaluation.
 
-## Security
+## Scope and security
 
 Skills are instructions and can influence powerful development tools. Review
-their contents before use, keep tool approval under user control, and see
-[SECURITY.md](SECURITY.md) for private reporting guidance.
+their contents before use and preserve the user's task and authorization scope.
+They add no automation runtime, hooks, MCP server, credentials, telemetry, or
+implicit permission to mutate projects or contact external systems.
+
+Maintainer scripts and tests live outside skills/ and run only when explicitly
+invoked. See [SECURITY.md](SECURITY.md) for private reporting guidance.

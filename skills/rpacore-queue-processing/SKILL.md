@@ -1,33 +1,33 @@
 ---
 name: rpacore-queue-processing
-description: Build and review RPA Core queue producers and workers. Use with SqliteQueue, add_once, run_queue_loop, leases, retries, poison handling, fencing, idempotency, or queue-backed transactions.
+description: Build and review local RPA Core queue producers and consumers. Use for SqliteQueue, stable enqueue identity, run_queue_loop, lease loss, retries, poison handling, and external-effect acknowledgement.
 ---
 
 # Build queue processing
 
-Before changing code, run `rpacore version` and confirm it satisfies the Core
-range in the repository's [`manifest.toml`](../../manifest.toml). Stop on a
-mismatch.
+Run the project's `rpacore version` and compare it with the exact supported
+version in [`manifest.toml`](../../manifest.toml). Stop on a mismatch or a
+missing manifest; do not guess compatibility from a skill copied on its own.
 
-Read the queue sections of the public
-[API reference](https://github.com/renatomoselli/rpacore/blob/0a50fcfa31692232b4fe8807997ce026c1e26bf3/docs/api.md)
-and
-[durability guide](https://github.com/renatomoselli/rpacore/blob/0a50fcfa31692232b4fe8807997ce026c1e26bf3/docs/durability.md)
-for exact provider and fencing contracts.
+Read the queue sections of the [API reference](https://github.com/renatomoselli/rpacore/blob/493252649ee6b9d387008e6b7ed41908e2733f46/docs/api.md) and
+[durability guide](https://github.com/renatomoselli/rpacore/blob/493252649ee6b9d387008e6b7ed41908e2733f46/docs/durability.md) for provider and fencing contracts.
 
-## Workflow
-
-1. Design for at least once delivery; never claim exactly once behavior.
-2. Construct `QueueItem(reference=<stable-key>, payload={...})` and pass it to
-   `SqliteQueue.add_once(item)` when duplicate enqueue requests represent the
-   same work.
+1. Design for at-least-once delivery; never claim exactly-once external effects.
+2. Construct QueueItem(reference=<stable-key>, payload={...}) and use
+   SqliteQueue.add_once when duplicate enqueue requests represent the same work.
+   Define whether changed input under the same filename/business key is new work.
 3. Keep queue references separate from transaction definition identity.
-4. Let `run_queue_loop(...)` own claim, renewal, attempt, revision, transaction,
+4. Let run_queue_loop own claim, renewal, attempt, revision, transaction,
    and completion fencing.
-5. Protect external effects with application idempotency before acknowledging
-   success.
-6. Test redelivery, retry scheduling, terminal/poison failure, lease loss,
-   stale claim rejection, and durable attempts in disposable databases.
+5. Before acknowledging success, identify how each external effect is verified
+   on replay. Distinguish the same operation from a conflicting submission.
+6. Test redelivery, terminal/poison failure, lease loss, stale claim rejection,
+   and durable attempts in disposable databases. Test the supported retry
+   policy; do not invent delayed-delivery APIs absent from the selected version.
+7. Report QueueRunSummary failures and uncertain transitions as well as
+   completed counts; distinguish processing outcome from notification delivery.
 
 After ownership is lost, do not acknowledge success or mutate the item as if
-the worker still held the claim.
+the consumer still held the claim. A retry decision must account for effects
+that may already have happened. This workflow concerns local queue consumers;
+it does not specify a remote worker protocol.

@@ -8,6 +8,7 @@ import hashlib
 import re
 import subprocess
 import sys
+import tempfile
 import tomllib
 from pathlib import Path, PurePosixPath
 from typing import Any, Sequence
@@ -159,7 +160,9 @@ def _validate_manifest_header(manifest: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(core, dict):
         raise ValidationError("manifest: [core] table is required")
     _require_exact_fields(core, EXPECTED_CORE_FIELDS, context="manifest.core")
-    _manifest_string(core, "version_spec", context="manifest.core")
+    version_spec = _manifest_string(core, "version_spec", context="manifest.core")
+    if re.fullmatch(r"==\d+\.\d+\.\d+", version_spec) is None:
+        raise ValidationError("manifest.core: version_spec must select one exact tested release (==x.y.z)")
     repository = _manifest_string(core, "repository", context="manifest.core").rstrip("/")
     commit = _manifest_string(core, "commit", context="manifest.core")
     if COMMIT_PATTERN.fullmatch(commit) is None:
@@ -170,10 +173,8 @@ def _validate_manifest_header(manifest: dict[str, Any]) -> dict[str, Any]:
         raise ValidationError(
             f"manifest.core: docs_base must equal immutable baseline {expected_docs_base}"
         )
-    if core.get("published_release") is not False:
-        raise ValidationError(
-            "manifest.core: published_release must be false for development-only status"
-        )
+    if not isinstance(core.get("published_release"), bool):
+        raise ValidationError("manifest.core: published_release must be a boolean about Core")
     return core
 
 
@@ -182,6 +183,7 @@ def _validate_skill(
     repo_root: Path,
     entry: dict[str, Any],
     docs_base: str,
+    verify_hash: bool = True,
 ) -> str:
     _require_exact_fields(entry, EXPECTED_SKILL_FIELDS, context="manifest.skills")
     name = _manifest_string(entry, "name", context="manifest.skills")
@@ -246,7 +248,7 @@ def _validate_skill(
             raise ValidationError(f"{path}: unsafe documentation path: {link}")
 
     actual_hash = hashlib.sha256(payload).hexdigest()
-    if actual_hash != expected_hash:
+    if verify_hash and actual_hash != expected_hash:
         raise ValidationError(
             f"{path}: SHA-256 mismatch: manifest={expected_hash}, actual={actual_hash}"
         )
@@ -290,7 +292,14 @@ def _validate_core_checkout(core_repo: Path, core: dict[str, Any], doc_links: se
             ) from exc
 
 
-def validate_repository(repo_root: Path, *, core_repo: Path | None = None) -> None:
+def validate_repository(
+    repo_root: Path, *, core_repo: Path | None = None, write_hashes: bool = False
+) -> dict[str, Any]:
+    """Validate the complete repository and return its validated manifest.
+
+    In write mode, return the manifest after hash regeneration. Callers do not
+    need to parse the file again or depend on private validation helpers.
+    """
     repo_root = repo_root.resolve()
     manifest = _load_manifest(repo_root / "manifest.toml")
     core = _validate_manifest_header(manifest)
@@ -317,27 +326,73 @@ def validate_repository(repo_root: Path, *, core_repo: Path | None = None) -> No
     docs_base = str(core["docs_base"]).rstrip("/")
     all_doc_links: set[str] = set()
     for entry in entries:
-        name = _validate_skill(repo_root=repo_root, entry=entry, docs_base=docs_base)
+        name = _validate_skill(
+            repo_root=repo_root, entry=entry, docs_base=docs_base,
+            verify_hash=not write_hashes,
+        )
         path = repo_root / "skills" / name / "SKILL.md"
         all_doc_links.update(
             link for link in MARKDOWN_LINK_PATTERN.findall(_read_utf8_lf(path)) if "/docs/" in link
         )
     if core_repo is not None:
         _validate_core_checkout(core_repo.resolve(), core, all_doc_links)
+    if write_hashes:
+        _write_hashes(repo_root, entries)
+        manifest = _load_manifest(repo_root / "manifest.toml")
+    return manifest
+
+
+def _write_hashes(repo_root: Path, entries: list[dict[str, Any]]) -> None:
+    """Replace only hash values after every other validation has succeeded."""
+    path = repo_root / "manifest.toml"
+    if path.is_symlink():
+        raise ValidationError("manifest: refusing to replace a symlink")
+    original = _read_utf8_lf(path)
+    # This is a deliberately bounded edit of our canonical manifest layout,
+    # not a general TOML serializer. Parsing/contract validation happens first;
+    # these exact block/hash forms preserve comments and every unrelated byte.
+    # Fail closed on other valid TOML spellings rather than guessing at edits.
+    blocks = re.split(r"(?m)(?=^\[\[skills\]\]$)", original)
+    if len(blocks) != len(entries) + 1:
+        raise ValidationError("manifest: hash regeneration requires one [[skills]] block per entry")
+    for index, entry in enumerate(entries, 1):
+        digest = hashlib.sha256(_skill_path(repo_root, entry["path"]).read_bytes()).hexdigest()
+        blocks[index], count = re.subn(
+            r'(?m)^sha256 = "[0-9a-f]{64}"$',
+            f'sha256 = "{digest}"', blocks[index],
+        )
+        if count != 1:
+            raise ValidationError("manifest: expected one canonical sha256 line per skill block")
+    updated = "".join(blocks)
+    if updated == original:
+        return
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", newline="\n", dir=repo_root,
+            prefix=".manifest-", suffix=".tmp", delete=False,
+        ) as stream:
+            temporary = Path(stream.name)
+            stream.write(updated)
+        temporary.replace(path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     parser.add_argument("--core-repo", type=Path)
+    parser.add_argument("--write", action="store_true", help="Validate first, then update only skill hashes.")
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     try:
-        validate_repository(args.repo_root, core_repo=args.core_repo)
-    except ValidationError as exc:
+        validate_repository(args.repo_root, core_repo=args.core_repo, write_hashes=args.write)
+    except (ValidationError, OSError) as exc:
         print(f"Agent Skills validation failed: {exc}", file=sys.stderr)
         return 1
     print("Agent Skills validation passed")

@@ -2,3 +2,6 @@ __pycache__/
 *.py[cod]
 .venv/
 validation-artifacts/
+
+# Local agent, review, and navigation tooling state
+.codegraph/

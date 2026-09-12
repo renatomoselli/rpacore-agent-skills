@@ -1,33 +1,53 @@
 ---
 name: rpacore-durability-recovery
-description: Implement and review durable execution, checkpoints, persistence, and resume compatibility. Use with execute_transaction, resume_transaction, definition_identity, SQLite history, or crash recovery tests.
+description: Design and verify durable RPA Core execution and recovery. Use for checkpoints, resume compatibility, external-effect replay, and interruption tests.
 ---
 
 # Build durable execution and recovery
 
-Before changing code, run `rpacore version` and confirm it satisfies the Core
-range in the repository's [`manifest.toml`](../../manifest.toml). Stop on a
-mismatch.
+Run the project's `rpacore version` and compare it with the exact supported
+version in [`manifest.toml`](../../manifest.toml). Stop on a mismatch or a
+missing manifest; do not guess compatibility from a skill copied on its own.
 
-Read
-[Durability and Storage](https://github.com/renatomoselli/rpacore/blob/0a50fcfa31692232b4fe8807997ce026c1e26bf3/docs/durability.md)
-and the
-[API reference](https://github.com/renatomoselli/rpacore/blob/0a50fcfa31692232b4fe8807997ce026c1e26bf3/docs/api.md)
-for checkpoint timing, schemas, and exact signatures.
+Read [Durability and Storage](https://github.com/renatomoselli/rpacore/blob/493252649ee6b9d387008e6b7ed41908e2733f46/docs/durability.md) and the
+[API reference](https://github.com/renatomoselli/rpacore/blob/493252649ee6b9d387008e6b7ed41908e2733f46/docs/api.md) for checkpoint timing and exact signatures.
 
-## Workflow
+## Durable execution
 
-1. Use `execute_transaction(...)` with
-   `transaction_db_path=manifest.transaction_db_path` when one-off work needs
-   strict checkpoints.
-2. Give durable work a non-empty application-owned `definition_identity`.
-3. Pass the exact same identity to `resume_transaction(...)`; incompatible or
-   unidentified non-successful work fails closed before recovery mutation.
+1. Use execute_transaction with transaction_db_path for strict one-off
+   checkpoints; use the manifest's database path in an existing project.
+2. Give durable work a non-empty application-owned definition_identity.
+3. Resume through the Python resume_transaction API with the matching
+   identity and concrete steps. It reattaches steps; execute the returned
+   transaction explicitly with durable checkpoints.
 4. Keep durable fields JSON-safe and runtime resources out of persistence.
-5. Let checkpoint failures propagate and keep inspection paths read-only.
-6. Test failure after a known checkpoint, reconstructed-process resume,
-   mismatched-identity rejection, and the reloaded final record using a
-   disposable database.
+   Let checkpoint failures propagate; keep inspection paths read-only.
+5. Test reconstructed-process resume, mismatched-identity rejection before
+   mutation, and the reloaded final record in a disposable database.
+
+## Derive replay behavior for each external effect
+
+Record the operation identity, affected resource, evidence persisted before
+the effect, available deduplication/read-back mechanism, and the uncertain
+result disposition. Match the strategy to the operation:
+
+| Effect | Required reasoning |
+| --- | --- |
+| File replacement | Publish a complete file atomically; verify that existing content belongs to this operation. |
+| Append or merge | Recognize a complete owned record; a matching partial prefix is insufficient. |
+| Move | Recognize the expected destination and input identity after source disappearance; existence alone is insufficient. |
+| External submission | Reuse a supported idempotency key or query acceptance; a timeout does not prove rejection. |
+
+If acceptance cannot be verified, surface that uncertainty for the
+application's reconciliation policy; do not automatically repeat the effect.
+A different request with the same business key may be a legitimate duplicate
+rejection, while replay of the original operation may already be complete.
+
+Test interruption before the effect, after effect-before-checkpoint, and after
+checkpoint. Reconstruct from persisted state and verify output ownership,
+content, and disposition. Use controlled local targets unless live testing is
+authorized. Atomic file publication and a Core checkpoint do not form one
+transaction with each other.
 
 Do not derive definition identity from a transaction reference, payload,
-deployment, Git commit, or RPA Core version.
+deployment, Git commit, or Core version.

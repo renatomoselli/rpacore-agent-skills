@@ -1,30 +1,32 @@
 ---
 name: rpacore-diagnostics-inspection
-description: Diagnose and inspect an RPA Core project safely. Use for rpacore doctor, manifests/config, transaction or queue health, transaction inspection/export, exit codes, or privacy-bounded support evidence.
+description: Inspect RPA Core project and transaction health without mutation. Use for doctor, manifests/configuration, transaction or queue evidence, exit codes, and bounded support handoff.
 ---
 
 # Diagnose and inspect RPA Core
 
-Before inspecting the project, run `rpacore version` and confirm it satisfies
-the Core range in the repository's [`manifest.toml`](../../manifest.toml). Stop
-on a mismatch.
+Run the project's `rpacore version` and compare it with the exact supported
+version in [`manifest.toml`](../../manifest.toml). Stop on a mismatch or a
+missing manifest; do not guess compatibility from a skill copied on its own.
 
-Use the public
-[CLI reference](https://github.com/renatomoselli/rpacore/blob/0a50fcfa31692232b4fe8807997ce026c1e26bf3/docs/cli.md)
-and
-[security guidance](https://github.com/renatomoselli/rpacore/blob/0a50fcfa31692232b4fe8807997ce026c1e26bf3/docs/security.md)
-for check IDs, formats, and exit codes.
+Use the [CLI reference](https://github.com/renatomoselli/rpacore/blob/493252649ee6b9d387008e6b7ed41908e2733f46/docs/cli.md) and
+[security guidance](https://github.com/renatomoselli/rpacore/blob/493252649ee6b9d387008e6b7ed41908e2733f46/docs/security.md) for formats and exit codes.
 
-## Workflow
-
-1. Start from the automation project with `rpacore version` and
-   `rpacore doctor`; use `--json` for machine-readable results.
-2. Select explicit config/database paths only when the operator identified the
-   intended files.
-3. Use `rpacore transaction list/show/export` for transaction evidence.
-4. Report bounded versions, check IDs/statuses, the command, and exit code.
+1. State the operator question: which work failed, whether an effect completed,
+   whether recovery is compatible, or whether a database is healthy.
+2. Start in the automation project with rpacore version and rpacore doctor;
+   use --json for machine-readable diagnostics.
+3. Use explicit config/database paths when the operator identified them.
+   Use transaction list/show/export for the relevant evidence. If the CLI
+   cannot filter the desired batch, use the documented public query API;
+   do not invent flags or reach directly for private SQL.
+4. Distinguish committed records, runtime logs, and unknown external effects.
+   An absent completion record alone does not prove an effect never happened.
+5. Report the command, exit code, versions, check IDs/statuses, and only the
+   approved identifiers needed to answer the question. Label missing evidence.
 
 Doctor and transaction inspection must not create, migrate, or change journal
-mode while diagnosing. Do not expose credentials, raw payloads, state,
-exception secrets, or artifact contents. Treat exports as potentially
-sensitive data.
+mode. Exports can contain state and exception details: inspect locally and
+select an explicit minimal field set before sharing. Omit raw payloads,
+credentials, artifact contents, and free-form exception text by default;
+references and paths may also be sensitive. Do not upload evidence implicitly.

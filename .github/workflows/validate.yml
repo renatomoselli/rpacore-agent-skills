@@ -32,7 +32,11 @@ jobs:
         run: python -m unittest discover -s tests -v
 
   pinned-core-baseline:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
 
     steps:
       - uses: actions/checkout@v7
@@ -44,10 +48,7 @@ jobs:
 
       - name: Read the manifest-owned Core commit
         id: core
-        shell: bash
-        run: |
-          commit="$(python -c "import tomllib; print(tomllib.load(open('manifest.toml', 'rb'))['core']['commit'])")"
-          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+        run: python scripts/check_core_baseline.py core-ref --github-output
 
       - name: Check out the pinned Core baseline
         uses: actions/checkout@v7
@@ -60,3 +61,6 @@ jobs:
 
       - name: Validate immutable Core documentation targets
         run: python scripts/validate_skills.py --repo-root . --core-repo core-baseline
+
+      - name: Verify reference consumers against the exact Core wheel
+        run: python scripts/check_core_baseline.py verify --core-repo core-baseline
