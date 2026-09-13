@@ -5,13 +5,15 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import check_core_baseline as baseline
 import verify_consumer as consumer
 from validate_skills import ValidationError
@@ -69,6 +71,28 @@ class ReceiptTests(unittest.TestCase):
                                   subprocess.CompletedProcess([], returncode, stdout, "")):
                     self.assertEqual(consumer.main(args), 1)
                 self.assertFalse(self.path.exists())
+
+    def test_receipt_identity_covers_every_distributed_resource(self) -> None:
+        repo = self.root / "companion"
+        shutil.copytree(
+            REPO_ROOT,
+            repo,
+            ignore=shutil.ignore_patterns(".git", "validation-artifacts", "__pycache__", "*.pyc"),
+        )
+        manifest = consumer.validate_repository(repo)
+        wheel = self.root / "core.whl"
+        wheel.write_bytes(b"wheel")
+        receipt = consumer.build_receipt(repo, manifest, wheel, {"passed": True})
+        expected = 2 * len(manifest["skills"])
+        self.assertEqual(receipt["schema_version"], 2)
+        self.assertEqual(len(receipt["distributed_files"]), expected)
+        self.assertIn(
+            "skills/rpacore-project-setup/references/compatibility.json",
+            receipt["distributed_files"],
+        )
+        self.assertEqual(
+            set(receipt["packaging_inputs"]), set(consumer.validate_skills.PACKAGING_INPUTS)
+        )
 
 
 class BaselineRunTests(unittest.TestCase):

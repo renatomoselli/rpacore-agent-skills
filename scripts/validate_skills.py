@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 import hashlib
+import json
 import re
 import subprocess
 import sys
@@ -13,6 +15,7 @@ import tomllib
 from pathlib import Path, PurePosixPath
 from typing import Any, Sequence
 
+from file_transaction import replace_files
 
 NAME_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 VERSION_PATTERN = re.compile(r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$")
@@ -50,11 +53,33 @@ EXPECTED_CORE_FIELDS = {
     "docs_base",
     "published_release",
 }
-EXPECTED_SKILL_FIELDS = {"name", "path", "sha256"}
+EXPECTED_SKILL_FIELDS = {"name", "path", "sha256", "resources"}
+EXPECTED_RESOURCE_FIELDS = {"path", "sha256"}
+PACKAGING_INPUTS = (
+    "manifest.toml",
+    "LICENSE",
+    "NOTICE",
+    "docs/distribution.md",
+    "scripts/file_transaction.py",
+    "scripts/package_skills.py",
+    "scripts/validate_skills.py",
+)
 
 
 class ValidationError(ValueError):
     """A bounded repository contract violation."""
+
+
+@dataclass(frozen=True)
+class SkillSource:
+    """Validated canonical paths and documentation links for one skill."""
+
+    name: str
+    path: Path
+    expected_hash: str
+    resource: dict[str, Any]
+    resource_path: Path
+    doc_links: frozenset[str]
 
 
 def _read_utf8_lf(path: Path) -> str:
@@ -129,22 +154,66 @@ def _require_exact_fields(table: dict[str, Any], expected: set[str], *, context:
         )
 
 
-def _skill_path(repo_root: Path, value: str) -> Path:
+def repository_path(
+    repo_root: Path, value: str, *, context: str, require_file: bool = False
+) -> Path:
+    """Resolve one POSIX repository-relative path under a shared safety policy."""
     relative = PurePosixPath(value)
-    if relative.is_absolute() or ".." in relative.parts:
-        raise ValidationError(f"manifest: unsafe skill path: {value}")
+    if relative.is_absolute() or not relative.parts or ".." in relative.parts:
+        raise ValidationError(f"{context}: unsafe repository path: {value}")
+    repo_root = repo_root.resolve()
     candidate = repo_root.joinpath(*relative.parts)
     try:
-        candidate.resolve().relative_to(repo_root.resolve())
+        candidate.resolve().relative_to(repo_root)
     except ValueError as exc:
-        raise ValidationError(f"manifest: skill path escapes repository: {value}") from exc
+        raise ValidationError(f"{context}: path escapes repository: {value}") from exc
+    current = candidate
+    while current != repo_root:
+        if current.is_symlink():
+            raise ValidationError(f"{context}: path must not use symlinks: {value}")
+        current = current.parent
+    if require_file and not candidate.is_file():
+        raise ValidationError(f"{context}: path must be a regular file: {value}")
     return candidate
+
+
+def compatibility_document(manifest: dict[str, Any]) -> dict[str, Any]:
+    """Return the generated, skill-local compatibility contract."""
+    core = manifest["core"]
+    return {
+        "schema_version": 1,
+        "companion": {
+            "version": manifest["companion_version"],
+            "status": manifest["status"],
+            "license": manifest["license"],
+        },
+        "core": {
+            "version_spec": core["version_spec"],
+            "commit": core["commit"],
+            "docs_base": core["docs_base"],
+            "published_release": core["published_release"],
+        },
+    }
+
+
+def compatibility_bytes(manifest: dict[str, Any]) -> bytes:
+    return (json.dumps(compatibility_document(manifest), indent=2) + "\n").encode("utf-8")
+
+
+def distributed_files(manifest: dict[str, Any]) -> dict[str, str]:
+    """Return every manifest-owned distributed path and digest."""
+    files: dict[str, str] = {}
+    for entry in manifest["skills"]:
+        files[entry["path"]] = entry["sha256"]
+        for resource in entry["resources"]:
+            files[resource["path"]] = resource["sha256"]
+    return dict(sorted(files.items()))
 
 
 def _validate_manifest_header(manifest: dict[str, Any]) -> dict[str, Any]:
     _require_exact_fields(manifest, EXPECTED_MANIFEST_FIELDS, context="manifest")
-    if manifest.get("schema_version") != 1:
-        raise ValidationError("manifest: schema_version must be 1")
+    if manifest.get("schema_version") != 2:
+        raise ValidationError("manifest: schema_version must be 2")
     version = _manifest_string(manifest, "companion_version", context="manifest")
     if VERSION_PATTERN.fullmatch(version) is None:
         raise ValidationError(f"manifest: invalid companion_version: {version}")
@@ -178,13 +247,12 @@ def _validate_manifest_header(manifest: dict[str, Any]) -> dict[str, Any]:
     return core
 
 
-def _validate_skill(
+def _validate_skill_source(
     *,
     repo_root: Path,
     entry: dict[str, Any],
     docs_base: str,
-    verify_hash: bool = True,
-) -> str:
+) -> SkillSource:
     _require_exact_fields(entry, EXPECTED_SKILL_FIELDS, context="manifest.skills")
     name = _manifest_string(entry, "name", context="manifest.skills")
     if len(name) > 64 or NAME_PATTERN.fullmatch(name) is None:
@@ -199,19 +267,57 @@ def _validate_skill(
     if re.fullmatch(r"[0-9a-f]{64}", expected_hash) is None:
         raise ValidationError(f"manifest.skills.{name}: sha256 must be 64 lowercase hex characters")
 
-    path = _skill_path(repo_root, path_value)
+    resources = entry.get("resources")
+    if not isinstance(resources, list) or len(resources) != 1 or not isinstance(resources[0], dict):
+        raise ValidationError(f"manifest.skills.{name}: exactly one compatibility resource is required")
+    resource = resources[0]
+    _require_exact_fields(
+        resource, EXPECTED_RESOURCE_FIELDS, context=f"manifest.skills.{name}.resources"
+    )
+    resource_path_value = _manifest_string(
+        resource, "path", context=f"manifest.skills.{name}.resources"
+    )
+    expected_resource_path = f"skills/{name}/references/compatibility.json"
+    if resource_path_value != expected_resource_path:
+        raise ValidationError(
+            f"manifest.skills.{name}: resource path must be {expected_resource_path}, "
+            f"got {resource_path_value}"
+        )
+    expected_resource_hash = _manifest_string(
+        resource, "sha256", context=f"manifest.skills.{name}.resources"
+    )
+    if re.fullmatch(r"[0-9a-f]{64}", expected_resource_hash) is None:
+        raise ValidationError(
+            f"manifest.skills.{name}.resources: sha256 must be 64 lowercase hex characters"
+        )
+
+    path = repository_path(repo_root, path_value, context=f"manifest.skills.{name}")
     if not path.is_file():
         raise ValidationError(f"{path}: skill file is missing")
-    if path.is_symlink() or path.parent.is_symlink():
-        raise ValidationError(f"{path}: skill path must not use symlinks")
+    resource_path = repository_path(
+        repo_root, resource_path_value, context=f"manifest.skills.{name}.resources"
+    )
+    references = resource_path.parent
     directory_entries = sorted(path.parent.iterdir(), key=lambda candidate: candidate.name)
-    if directory_entries != [path]:
-        extra = ", ".join(
-            str(candidate.relative_to(repo_root))
-            for candidate in directory_entries
-            if candidate != path
-        )
-        raise ValidationError(f"{path.parent}: instruction-only skill contains extra entries: {extra}")
+    allowed_entries = {path, references}
+    extra_entries = [
+        candidate for candidate in directory_entries if candidate not in allowed_entries
+    ]
+    if extra_entries:
+        extra = ", ".join(str(candidate.relative_to(repo_root)) for candidate in extra_entries)
+        raise ValidationError(f"{path.parent}: portable skill contains extra entries: {extra}")
+    if references.exists() and not references.is_dir():
+        raise ValidationError(f"{references}: references must be a real directory")
+    if references.exists():
+        reference_entries = sorted(references.iterdir(), key=lambda candidate: candidate.name)
+        extra_references = [candidate for candidate in reference_entries if candidate != resource_path]
+        if extra_references:
+            extra = ", ".join(
+                str(candidate.relative_to(repo_root)) for candidate in extra_references
+            )
+            raise ValidationError(f"{references}: contains extra entries: {extra}")
+        if resource_path.exists() and not resource_path.is_file():
+            raise ValidationError(f"{resource_path}: compatibility resource must be a regular file")
 
     payload = path.read_bytes()
     if len(payload) > MAX_SKILL_BYTES:
@@ -225,9 +331,9 @@ def _validate_skill(
     description = fields["description"]
     if len(description) > 1024:
         raise ValidationError(f"{path}: description exceeds 1024 characters")
-    if "rpacore version" not in body or "manifest.toml" not in body:
+    if "rpacore version" not in body or "references/compatibility.json" not in body:
         raise ValidationError(
-            f"{path}: body must route compatibility through rpacore version and manifest.toml"
+            f"{path}: body must route compatibility through rpacore version and its local resource"
         )
     folded_text = text.casefold()
     for forbidden in FORBIDDEN_SKILL_TEXT:
@@ -247,12 +353,45 @@ def _validate_skill(
         if relative_doc.is_absolute() or ".." in relative_doc.parts or not relative_doc.parts:
             raise ValidationError(f"{path}: unsafe documentation path: {link}")
 
-    actual_hash = hashlib.sha256(payload).hexdigest()
-    if verify_hash and actual_hash != expected_hash:
+    return SkillSource(
+        name=name,
+        path=path,
+        expected_hash=expected_hash,
+        resource=resource,
+        resource_path=resource_path,
+        doc_links=frozenset(doc_links),
+    )
+
+
+def _validate_generated_skill(manifest: dict[str, Any], source: SkillSource) -> None:
+    """Validate one generated resource and the two manifest-owned digests."""
+    path = source.path
+    resource = source.resource
+    resource_path = source.resource_path
+    if not resource_path.is_file():
+        raise ValidationError(f"{resource_path}: path must be a regular file")
+    if not resource_path.parent.is_dir():
+        raise ValidationError(f"{resource_path.parent}: references must be a real directory")
+
+    actual_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+    if actual_hash != source.expected_hash:
         raise ValidationError(
-            f"{path}: SHA-256 mismatch: manifest={expected_hash}, actual={actual_hash}"
+            f"{path}: SHA-256 mismatch: manifest={source.expected_hash}, actual={actual_hash}"
         )
-    return name
+    resource_payload = resource_path.read_bytes()
+    _read_utf8_lf(resource_path)
+    try:
+        actual_compatibility = json.loads(resource_payload)
+    except json.JSONDecodeError as exc:
+        raise ValidationError(f"{resource_path}: invalid JSON: {exc}") from exc
+    if actual_compatibility != compatibility_document(manifest):
+        raise ValidationError(f"{resource_path}: generated compatibility does not match manifest")
+    actual_resource_hash = hashlib.sha256(resource_payload).hexdigest()
+    if actual_resource_hash != resource["sha256"]:
+        raise ValidationError(
+            f"{resource_path}: SHA-256 mismatch: "
+            f"manifest={resource['sha256']}, actual={actual_resource_hash}"
+        )
 
 
 def _validate_core_checkout(core_repo: Path, core: dict[str, Any], doc_links: set[str]) -> None:
@@ -292,15 +431,9 @@ def _validate_core_checkout(core_repo: Path, core: dict[str, Any], doc_links: se
             ) from exc
 
 
-def validate_repository(
-    repo_root: Path, *, core_repo: Path | None = None, write_hashes: bool = False
-) -> dict[str, Any]:
-    """Validate the complete repository and return its validated manifest.
-
-    In write mode, return the manifest after hash regeneration. Callers do not
-    need to parse the file again or depend on private validation helpers.
-    """
-    repo_root = repo_root.resolve()
+def _load_repository_layout(
+    repo_root: Path,
+) -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
     manifest = _load_manifest(repo_root / "manifest.toml")
     core = _validate_manifest_header(manifest)
     entries = manifest.get("skills")
@@ -322,62 +455,147 @@ def validate_repository(
         raise ValidationError(
             f"manifest: skill directory set mismatch: manifest={names}, actual={actual_directories}"
         )
+    return manifest, core, entries
 
+
+def _load_validated_sources(
+    repo_root: Path, core_repo: Path | None = None
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[SkillSource]]:
+    manifest, core, entries = _load_repository_layout(repo_root)
     docs_base = str(core["docs_base"]).rstrip("/")
-    all_doc_links: set[str] = set()
-    for entry in entries:
-        name = _validate_skill(
-            repo_root=repo_root, entry=entry, docs_base=docs_base,
-            verify_hash=not write_hashes,
-        )
-        path = repo_root / "skills" / name / "SKILL.md"
-        all_doc_links.update(
-            link for link in MARKDOWN_LINK_PATTERN.findall(_read_utf8_lf(path)) if "/docs/" in link
-        )
+    sources = [
+        _validate_skill_source(repo_root=repo_root, entry=entry, docs_base=docs_base)
+        for entry in entries
+    ]
     if core_repo is not None:
-        _validate_core_checkout(core_repo.resolve(), core, all_doc_links)
-    if write_hashes:
-        _write_hashes(repo_root, entries)
-        manifest = _load_manifest(repo_root / "manifest.toml")
-    return manifest
+        doc_links = {link for source in sources for link in source.doc_links}
+        _validate_core_checkout(core_repo.resolve(), core, doc_links)
+    return manifest, entries, sources
 
 
-def _write_hashes(repo_root: Path, entries: list[dict[str, Any]]) -> None:
-    """Replace only hash values after every other validation has succeeded."""
-    path = repo_root / "manifest.toml"
-    if path.is_symlink():
+def _render_manifest_hashes(repo_root: Path, payloads: dict[str, bytes]) -> bytes:
+    """Update canonical hash fields by paths supplied by the parsed manifest."""
+    manifest_path = repo_root / "manifest.toml"
+    if manifest_path.is_symlink():
         raise ValidationError("manifest: refusing to replace a symlink")
-    original = _read_utf8_lf(path)
-    # This is a deliberately bounded edit of our canonical manifest layout,
-    # not a general TOML serializer. Parsing/contract validation happens first;
-    # these exact block/hash forms preserve comments and every unrelated byte.
-    # Fail closed on other valid TOML spellings rather than guessing at edits.
-    blocks = re.split(r"(?m)(?=^\[\[skills\]\]$)", original)
-    if len(blocks) != len(entries) + 1:
-        raise ValidationError("manifest: hash regeneration requires one [[skills]] block per entry")
-    for index, entry in enumerate(entries, 1):
-        digest = hashlib.sha256(_skill_path(repo_root, entry["path"]).read_bytes()).hexdigest()
-        blocks[index], count = re.subn(
-            r'(?m)^sha256 = "[0-9a-f]{64}"$',
-            f'sha256 = "{digest}"', blocks[index],
-        )
-        if count != 1:
-            raise ValidationError("manifest: expected one canonical sha256 line per skill block")
-    updated = "".join(blocks)
-    if updated == original:
-        return
-    temporary: Path | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", newline="\n", dir=repo_root,
-            prefix=".manifest-", suffix=".tmp", delete=False,
-        ) as stream:
-            temporary = Path(stream.name)
-            stream.write(updated)
-        temporary.replace(path)
-    finally:
-        if temporary is not None:
-            temporary.unlink(missing_ok=True)
+    lines = _read_utf8_lf(manifest_path).splitlines(keepends=True)
+    section_starts = [
+        index
+        for index, line in enumerate(lines)
+        if line.rstrip("\n") in {"[[skills]]", "[[skills.resources]]"}
+    ]
+    seen: set[str] = set()
+    for position, start in enumerate(section_starts):
+        stop = section_starts[position + 1] if position + 1 < len(section_starts) else len(lines)
+        path_rows = [
+            (index, match.group(1))
+            for index in range(start + 1, stop)
+            if (match := re.fullmatch(r'path = "([^"]+)"\n', lines[index])) is not None
+        ]
+        sha_rows = [
+            index
+            for index in range(start + 1, stop)
+            if re.fullmatch(r'sha256 = "[0-9a-f]{64}"\n', lines[index]) is not None
+        ]
+        if len(path_rows) != 1 or len(sha_rows) != 1:
+            raise ValidationError(
+                "manifest: hash regeneration requires one declared path and one canonical "
+                "sha256 per distributed-file section"
+            )
+        _, declared_path = path_rows[0]
+        if declared_path not in payloads or declared_path in seen:
+            raise ValidationError(
+                f"manifest: unexpected or duplicate hash section for {declared_path}"
+            )
+        seen.add(declared_path)
+        digest = hashlib.sha256(payloads[declared_path]).hexdigest()
+        lines[sha_rows[0]] = f'sha256 = "{digest}"\n'
+    if seen != set(payloads):
+        missing = sorted(set(payloads) - seen)
+        raise ValidationError(f"manifest: hash sections do not match parsed files: missing={missing}")
+    return "".join(lines).encode("utf-8")
+
+
+def _pending_generated_files(
+    repo_root: Path,
+    manifest: dict[str, Any],
+    sources: list[SkillSource],
+) -> dict[Path, bytes]:
+    compatibility = compatibility_bytes(manifest)
+    payloads: dict[str, bytes] = {}
+    pending: dict[Path, bytes] = {}
+    for source in sources:
+        entry = next(entry for entry in manifest["skills"] if entry["name"] == source.name)
+        payloads[entry["path"]] = source.path.read_bytes()
+        payloads[source.resource["path"]] = compatibility
+        pending[source.resource_path] = compatibility
+    pending[repo_root / "manifest.toml"] = _render_manifest_hashes(repo_root, payloads)
+    return pending
+
+
+def _validate_pending_repository(
+    repo_root: Path,
+    entries: list[dict[str, Any]],
+    pending: dict[Path, bytes],
+) -> None:
+    with tempfile.TemporaryDirectory(prefix="rpacore-skills-write-") as directory:
+        candidate = Path(directory)
+        (candidate / "manifest.toml").write_bytes(pending[repo_root / "manifest.toml"])
+        for entry in entries:
+            destination = repository_path(candidate, entry["path"], context="pending manifest.skills")
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(
+                repository_path(
+                    repo_root, entry["path"], context="manifest.skills", require_file=True
+                ).read_bytes()
+            )
+            for resource in entry["resources"]:
+                resource_destination = repository_path(
+                    candidate,
+                    resource["path"],
+                    context="pending manifest.skills.resources",
+                )
+                resource_destination.parent.mkdir(parents=True, exist_ok=True)
+                source_resource = repository_path(
+                    repo_root, resource["path"], context="manifest.skills.resources"
+                )
+                resource_destination.write_bytes(pending[source_resource])
+        validate_repository(candidate)
+
+
+def regenerate_repository(
+    repo_root: Path | str, *, core_repo: Path | str | None = None
+) -> dict[str, Any]:
+    """Validate source inputs, validate generated state, then replace with rollback."""
+    repo_root = Path(repo_root).resolve()
+    resolved_core = Path(core_repo).resolve() if core_repo is not None else None
+    manifest, entries, sources = _load_validated_sources(repo_root, resolved_core)
+    pending = _pending_generated_files(repo_root, manifest, sources)
+    _validate_pending_repository(repo_root, entries, pending)
+    replace_files(
+        repo_root,
+        pending,
+        lambda: validate_repository(repo_root, core_repo=resolved_core),
+    )
+    return _load_manifest(repo_root / "manifest.toml")
+
+
+def validate_repository(
+    repo_root: Path | str,
+    *,
+    core_repo: Path | str | None = None,
+    write_hashes: bool = False,
+) -> dict[str, Any]:
+    """Validate the repository, or regenerate then validate when explicitly requested."""
+    if write_hashes:
+        return regenerate_repository(repo_root, core_repo=core_repo)
+
+    repo_root = Path(repo_root).resolve()
+    resolved_core = Path(core_repo).resolve() if core_repo is not None else None
+    manifest, _, sources = _load_validated_sources(repo_root, resolved_core)
+    for source in sources:
+        _validate_generated_skill(manifest, source)
+    return manifest
 
 
 def _build_parser() -> argparse.ArgumentParser:

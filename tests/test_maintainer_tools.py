@@ -5,16 +5,32 @@ import importlib.util
 from pathlib import Path
 import re
 import shutil
+import stat
 import sys
 import tempfile
 import tomllib
 import unittest
-from unittest.mock import patch
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
+from file_transaction import TEMP_PREFIX, replace_files
 import validate_skills as validator
 import verify_consumer as consumer
+
+
+def tree_state(root: Path) -> dict[str, tuple[object, ...]]:
+    state: dict[str, tuple[object, ...]] = {}
+    for path in sorted(root.rglob("*")):
+        relative = path.relative_to(root).as_posix()
+        if path.is_dir():
+            state[relative] = ("directory",)
+        elif path.is_file():
+            state[relative] = (
+                "file",
+                path.read_bytes(),
+                stat.S_IMODE(path.stat().st_mode),
+            )
+    return state
 
 
 class HashMaintenanceTests(unittest.TestCase):
@@ -26,6 +42,12 @@ class HashMaintenanceTests(unittest.TestCase):
         shutil.copy2(source / "manifest.toml", self.root / "manifest.toml")
         shutil.copytree(source / "skills", self.root / "skills")
         self.skill = self.root / "skills/rpacore-project-setup/SKILL.md"
+
+    def assert_tree_unchanged(self, before: dict[str, tuple[object, ...]]) -> None:
+        self.assertEqual(tree_state(self.root), before)
+
+    def assert_no_transaction_temps(self) -> None:
+        self.assertFalse(list(self.root.glob(f"{TEMP_PREFIX}*.tmp")))
 
     def test_regeneration_changes_only_hashes_and_is_idempotent(self) -> None:
         path = self.root / "manifest.toml"
@@ -51,7 +73,7 @@ class HashMaintenanceTests(unittest.TestCase):
         with self.assertRaisesRegex(validator.ValidationError, "forbidden content"):
             validator.validate_repository(self.root, write_hashes=True)
         self.assertEqual(path.read_bytes(), before)
-        self.assertFalse(list(self.root.glob(".manifest-*.tmp")))
+        self.assert_no_transaction_temps()
 
     def test_regeneration_rejects_crlf_without_normalizing_source(self) -> None:
         before = (self.root / "manifest.toml").read_bytes()
@@ -72,7 +94,7 @@ class HashMaintenanceTests(unittest.TestCase):
             validator._validate_manifest_header(manifest)
 
     def test_public_validation_returns_the_checked_manifest(self) -> None:
-        manifest = validator.validate_repository(self.root)
+        manifest = validator.validate_repository(str(self.root))
         self.assertEqual(manifest["core"]["version_spec"], "==0.3.0")
         self.assertEqual(manifest, tomllib.loads((self.root / "manifest.toml").read_text(encoding="utf-8")))
 
@@ -84,17 +106,110 @@ class HashMaintenanceTests(unittest.TestCase):
         with self.assertRaisesRegex(validator.ValidationError, "canonical sha256"):
             validator.validate_repository(self.root, write_hashes=True)
         self.assertEqual(path.read_bytes(), original)
-        self.assertFalse(list(self.root.glob(".manifest-*.tmp")))
+        self.assert_no_transaction_temps()
 
-    def test_failed_atomic_replace_preserves_manifest_and_cleans_temporary(self) -> None:
-        path = self.root / "manifest.toml"
-        original = path.read_bytes()
-        self.skill.write_bytes(self.skill.read_bytes() + b"\nAdditional reviewed guidance.\n")
-        with patch.object(Path, "replace", side_effect=PermissionError("controlled replace failure")):
-            with self.assertRaisesRegex(PermissionError, "controlled replace failure"):
-                validator.validate_repository(self.root, write_hashes=True)
-        self.assertEqual(path.read_bytes(), original)
-        self.assertFalse(list(self.root.glob(".manifest-*.tmp")))
+    def test_apply_failure_restores_tree_and_cleans_temporary(self) -> None:
+        manifest_path = self.root / "manifest.toml"
+        blocker = self.root / "blocked-parent"
+        blocker.write_text("not a directory\n", encoding="utf-8", newline="\n")
+        before = tree_state(self.root)
+        pending = {
+            manifest_path: manifest_path.read_bytes() + b"\n",
+            blocker / "child": b"cannot be written\n",
+        }
+
+        with self.assertRaises(OSError):
+            replace_files(self.root, pending, lambda: None)
+
+        self.assert_tree_unchanged(before)
+        self.assert_no_transaction_temps()
+
+    def test_validation_failure_restores_tree_and_cleans_temporary(self) -> None:
+        manifest_path = self.root / "manifest.toml"
+        resource = self.root / "skills/rpacore-project-setup/references/compatibility.json"
+        before = tree_state(self.root)
+        pending = {
+            manifest_path: manifest_path.read_bytes() + b"\n",
+            resource: b"{}\n",
+        }
+
+        def reject() -> None:
+            raise RuntimeError("controlled validation failure")
+
+        with self.assertRaisesRegex(RuntimeError, "controlled validation failure"):
+            replace_files(self.root, pending, reject)
+
+        self.assert_tree_unchanged(before)
+        self.assert_no_transaction_temps()
+
+    def test_base_exception_rolls_back_generated_resources(self) -> None:
+        class ControlledAbort(BaseException):
+            pass
+
+        resource = self.root / "skills/rpacore-project-setup/references/compatibility.json"
+        before = tree_state(self.root)
+
+        def abort() -> None:
+            raise ControlledAbort()
+
+        with self.assertRaises(ControlledAbort):
+            replace_files(self.root, {resource: b"{}\n"}, abort)
+
+        self.assert_tree_unchanged(before)
+        self.assert_no_transaction_temps()
+
+    def test_regeneration_preserves_existing_file_mode(self) -> None:
+        manifest_path = self.root / "manifest.toml"
+        original_mode = stat.S_IMODE(manifest_path.stat().st_mode)
+        self.skill.write_bytes(self.skill.read_bytes() + b"\nMode preservation probe.\n")
+
+        validator.validate_repository(self.root, write_hashes=True)
+
+        self.assertEqual(stat.S_IMODE(manifest_path.stat().st_mode), original_mode)
+
+    def test_final_revalidation_failure_rolls_back_all_generated_files(self) -> None:
+        resource = self.root / "skills/rpacore-project-setup/references/compatibility.json"
+        before = tree_state(self.root)
+
+        with self.assertRaisesRegex(validator.ValidationError, "generated compatibility"):
+            replace_files(
+                self.root,
+                {resource: b"{}\n"},
+                lambda: validator.validate_repository(self.root),
+            )
+
+        self.assert_tree_unchanged(before)
+        self.assert_no_transaction_temps()
+
+    def test_hash_regeneration_is_keyed_by_declared_path(self) -> None:
+        manifest_path = self.root / "manifest.toml"
+        text = manifest_path.read_text(encoding="utf-8")
+        skill_path = "skills/rpacore-project-setup/SKILL.md"
+        resource_path = "skills/rpacore-project-setup/references/compatibility.json"
+        resource = self.root.joinpath(*resource_path.split("/"))
+        manifest = tomllib.loads(text)
+        entry = next(item for item in manifest["skills"] if item["path"] == skill_path)
+        text = text.replace(
+            f'path = "{skill_path}"\nsha256 = "{entry["sha256"]}"',
+            f'sha256 = "{entry["sha256"]}"\npath = "{skill_path}"',
+            1,
+        ).replace(
+            f'path = "{resource_path}"\nsha256 = "{entry["resources"][0]["sha256"]}"',
+            f'sha256 = "{entry["resources"][0]["sha256"]}"\npath = "{resource_path}"',
+            1,
+        )
+        manifest_path.write_text(text, encoding="utf-8", newline="\n")
+        self.skill.write_bytes(self.skill.read_bytes() + b"\nPath-keyed hash probe.\n")
+
+        updated = validator.validate_repository(self.root, write_hashes=True)
+        updated_entry = next(item for item in updated["skills"] if item["path"] == skill_path)
+        self.assertEqual(
+            updated_entry["sha256"], hashlib.sha256(self.skill.read_bytes()).hexdigest()
+        )
+        self.assertEqual(
+            updated_entry["resources"][0]["sha256"], hashlib.sha256(resource.read_bytes()).hexdigest()
+        )
+        validator.validate_repository(self.root)
 
 
 

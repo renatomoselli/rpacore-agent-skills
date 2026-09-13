@@ -8,14 +8,17 @@ variation. Link immutable Core public docs instead of copying API tables.
 
 1. Review the skill change and its intended request examples.
 2. Run python scripts/validate_skills.py --repo-root . --write.
-3. Inspect the diff: regeneration may change sha256 values only.
+3. Inspect the diff: regeneration may update generated compatibility JSON and
+   the corresponding `sha256` values only.
 4. Run static validation and python -m unittest discover -s tests -v.
 5. Run the affected consumer/evaluation scenarios below.
 
 The LF .gitattributes contract applies on Windows too. The hash writer rejects
 CRLF, invalid links, malformed metadata, and forbidden content before updating
-the manifest. It writes the manifest atomically and leaves unrelated fields
-unchanged. It does not approve the instruction's meaning.
+generated resources or the manifest. It can create a missing generated
+`references/compatibility.json`, validates the complete pending state first,
+and rolls back every replacement on a late write or validation failure. It
+leaves unrelated fields unchanged and does not approve instruction meaning.
 
 ## Verify an installed consumer
 
@@ -55,7 +58,8 @@ The verifier:
 - verifies actual installed Python-file bytes against the selected wheel;
 - runs public-API reference consumers, generated-project tests, and a real
   interrupted-process recovery scenario in disposable directories;
-- writes hashes for the manifest, skills, wheel, and verification scripts,
+- writes hashes for the manifest, every distributed skill/resource, packaging
+  inputs, wheel, and verification scripts,
   plus environment identity and results, only after successful checks.
 
 The reference publication fixture assumes one writer per destination. It
@@ -68,12 +72,50 @@ instead of --receipt. It reruns the checks and rejects stale or different
 evidence. A changed instruction, verifier, wheel, or environment requires a
 fresh result; do not edit a receipt to make it agree.
 
+Schema-1 receipts are historical artifacts and cannot be rechecked by the
+schema-2 verifier. Retain the original verifier with old evidence or generate a
+fresh schema-2 receipt; there is no schema-selection switch.
+
 Receipt identity deliberately includes the Python patch version, pytest version,
 absolute Python executable path, and installed Core path. Moving or recreating
 the environment requires a new receipt after verification; --check-receipt
 asserts the same complete environment and inputs, not portability of old
 evidence. The generated-project scenario intentionally checks the scaffold of
 the exact selected Core release; a baseline upgrade must revisit those checks.
+
+The repository's independent machine-readable contracts are:
+
+| Contract | Current schema | Compatibility rule |
+| --- | --- | --- |
+| Root manifest | 2 | Mandatory distributed resources; unknown versions fail closed |
+| Skill-local compatibility resource | 1 | Generated from the validated root manifest |
+| Release inventory | 1 | Rebuild with the matching packager revision |
+| Consumer receipt | 2 | Schema-1 evidence is superseded and cannot be rechecked |
+
+## Build portable candidates
+
+Use `scripts/package_skills.py build` with the explicit `portable` profile,
+`--frozen`, and a new output directory, then use `check --frozen` against the
+same source and output.
+The build contains a full pack, individual folders, deterministic archives, a
+complete payload/artifact inventory, and an adjacent inventory checksum. The
+inventory also identifies the manifest, validator, transaction helper,
+packager, license, notice, and installation guide inputs. `check`
+builds an independent expectation and does not repair missing, extra, or
+changed output files.
+
+A frozen build requires a HEAD-clean source, including no non-ignored untracked
+files, before producing an output. Commit first; then run the frozen build and
+check. Omit `--frozen` only for development checks; those builds record
+`working_tree_dirty: true` and cannot be release input. Run twice into different
+directories and compare all bytes. See
+`distribution.md` for isolated client rehearsal, conflict handling, and the
+support boundary.
+
+Every skill intentionally carries its own byte-identical
+`references/compatibility.json`; detached folders cannot depend on a shared
+parent resource. Update those generated copies only through validator write
+mode.
 
 ## Change the Core baseline
 

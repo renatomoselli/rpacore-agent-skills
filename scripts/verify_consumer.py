@@ -89,11 +89,19 @@ def run_checks(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, Any]
 def build_receipt(repo: Path, manifest: dict[str, Any], wheel: Path,
                   outcomes: dict[str, Any]) -> dict[str, Any]:
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "evidence_kind": "reference-consumer-validation",
         "companion_version": manifest["companion_version"],
         "manifest_sha256": sha256_of(repo / "manifest.toml"),
-        "skills": {entry["name"]: entry["sha256"] for entry in manifest["skills"]},
+        "distributed_files": validate_skills.distributed_files(manifest),
+        "packaging_inputs": {
+            relative: sha256_of(
+                validate_skills.repository_path(
+                    repo, relative, context="receipt packaging input", require_file=True
+                )
+            )
+            for relative in validate_skills.PACKAGING_INPUTS
+        },
         "core_commit": manifest["core"]["commit"],
         "core_version": manifest["core"]["version_spec"].removeprefix("=="),
         "wheel_sha256": sha256_of(wheel),

@@ -6,10 +6,10 @@ description: Set up or upgrade an RPA Core automation project. Use for approved 
 # Set up or upgrade an RPA Core project
 
 Inspect the existing project's rpacore version before changing it. The exact
-version in [manifest.toml](../../manifest.toml) defines the target environment.
+version in [references/compatibility.json](references/compatibility.json) defines the target environment.
 For new projects, install the approved matching source in a project-local
 environment before scaffolding. Verify the target version before applying
-its APIs; stop if the manifest is missing or the target does not match.
+its APIs; stop if the compatibility resource is missing or the target does not match.
 An explicitly requested upgrade from another version follows the upgrade
 workflow below; the source mismatch does not prevent migration assessment.
 
@@ -21,7 +21,7 @@ Use the [tutorial](https://github.com/renatomoselli/rpacore/blob/493252649ee6b9d
 ## New project
 
 1. Verify Python 3.11+ and create a project-local virtual environment.
-2. Install Core from the user-approved source matching the manifest.
+2. Install Core from the user-approved source matching the compatibility resource.
    Core's published_release flag describes Core, not companion availability.
 3. Run rpacore init <project-name> from the parent directory. Stop if the
    target exists; use the existing-project workflow instead of overwriting it.

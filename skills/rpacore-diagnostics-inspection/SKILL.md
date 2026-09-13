@@ -6,8 +6,8 @@ description: Inspect RPA Core project and transaction health without mutation. U
 # Diagnose and inspect RPA Core
 
 Run the project's `rpacore version` and compare it with the exact supported
-version in [`manifest.toml`](../../manifest.toml). Stop on a mismatch or a
-missing manifest; do not guess compatibility from a skill copied on its own.
+version in [`references/compatibility.json`](references/compatibility.json).
+Stop on a mismatch or a missing resource; do not guess compatibility.
 
 Use the [CLI reference](https://github.com/renatomoselli/rpacore/blob/493252649ee6b9d387008e6b7ed41908e2733f46/docs/cli.md) and
 [security guidance](https://github.com/renatomoselli/rpacore/blob/493252649ee6b9d387008e6b7ed41908e2733f46/docs/security.md) for formats and exit codes.

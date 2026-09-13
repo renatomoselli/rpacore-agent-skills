@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-import importlib.util
+import json
 import shutil
 import subprocess
+import sys
 import tempfile
 import tomllib
 import unittest
@@ -11,11 +12,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "validate_skills.py"
-SPEC = importlib.util.spec_from_file_location("validate_skills", SCRIPT_PATH)
-if SPEC is None or SPEC.loader is None:
-    raise RuntimeError(f"Could not load validator: {SCRIPT_PATH}")
-VALIDATOR = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(VALIDATOR)
+sys.path.insert(0, str(SCRIPT_PATH.parent))
+import validate_skills as VALIDATOR
 
 
 class ValidatorTests(unittest.TestCase):
@@ -87,6 +85,20 @@ class ValidatorTests(unittest.TestCase):
         with self.assertRaisesRegex(VALIDATOR.ValidationError, "SHA-256 mismatch"):
             VALIDATOR.validate_repository(self.repo_root)
 
+    def test_changed_or_missing_compatibility_resource_fails_validation(self) -> None:
+        resource = (
+            self.repo_root
+            / "skills/rpacore-project-setup/references/compatibility.json"
+        )
+        resource.write_bytes(resource.read_bytes().replace(b'"==0.3.0"', b'"==9.9.9"'))
+        with self.assertRaisesRegex(
+            VALIDATOR.ValidationError, "generated compatibility does not match manifest"
+        ):
+            VALIDATOR.validate_repository(self.repo_root)
+        resource.unlink()
+        with self.assertRaisesRegex(VALIDATOR.ValidationError, "regular file"):
+            VALIDATOR.validate_repository(self.repo_root)
+
     def test_write_regeneration_round_trip_updates_only_hashes(self) -> None:
         skill = self.repo_root / "skills" / "rpacore-project-setup" / "SKILL.md"
         skill.write_text(
@@ -109,6 +121,39 @@ class ValidatorTests(unittest.TestCase):
         changed = [(old, new) for old, new in zip(before, after) if old != new]
         self.assertEqual(len(changed), 1)
         self.assertTrue(all("sha256" in old for old, _ in changed))
+
+    def test_write_regenerates_compatibility_and_its_hash(self) -> None:
+        resource = (
+            self.repo_root
+            / "skills/rpacore-project-setup/references/compatibility.json"
+        )
+        resource.write_bytes(resource.read_bytes().replace(b'"==0.3.0"', b'"==9.9.9"'))
+        with self.assertRaisesRegex(
+            VALIDATOR.ValidationError, "generated compatibility does not match manifest"
+        ):
+            VALIDATOR.validate_repository(self.repo_root)
+
+        manifest = VALIDATOR.validate_repository(self.repo_root, write_hashes=True)
+        expected = VALIDATOR.compatibility_document(manifest)
+        self.assertEqual(
+            expected,
+            json.loads(resource.read_text(encoding="utf-8")),
+        )
+        VALIDATOR.validate_repository(self.repo_root)
+
+    def test_write_bootstraps_missing_compatibility_resource_and_directory(self) -> None:
+        references = self.repo_root / "skills/rpacore-project-setup/references"
+        resource = references / "compatibility.json"
+
+        resource.unlink()
+        VALIDATOR.validate_repository(self.repo_root, write_hashes=True)
+        self.assertTrue(resource.is_file())
+        VALIDATOR.validate_repository(self.repo_root)
+
+        shutil.rmtree(references)
+        VALIDATOR.validate_repository(self.repo_root, write_hashes=True)
+        self.assertTrue(resource.is_file())
+        VALIDATOR.validate_repository(self.repo_root)
 
     def test_unexpected_frontmatter_field_is_rejected(self) -> None:
         skill = self.repo_root / "skills" / "rpacore-project-setup" / "SKILL.md"
@@ -171,8 +216,8 @@ class ValidatorTests(unittest.TestCase):
     def test_unknown_manifest_field_is_rejected(self) -> None:
         manifest = self.repo_root / "manifest.toml"
         text = manifest.read_text(encoding="utf-8").replace(
-            "schema_version = 1\n",
-            "schema_version = 1\nunexpected = true\n",
+            "schema_version = 2\n",
+            "schema_version = 2\nunexpected = true\n",
             1,
         )
         manifest.write_text(text, encoding="utf-8", newline="\n")
@@ -196,7 +241,7 @@ class ValidatorTests(unittest.TestCase):
 
     def test_manifest_identity_invariants_fail_closed(self) -> None:
         cases = (
-            ("schema_version = 1", "schema_version = 2", "schema_version must be 1"),
+            ("schema_version = 2", "schema_version = 1", "schema_version must be 2"),
             (
                 'companion_version = "0.1.0-dev.0"',
                 'companion_version = "not-a-version"',
@@ -271,9 +316,9 @@ class ValidatorTests(unittest.TestCase):
                 "body must route compatibility",
             ),
             (
-                "manifest-route",
-                "manifest.toml",
-                "compatibility manifest",
+                "compatibility-route",
+                "references/compatibility.json",
+                "references/missing.json",
                 "body must route compatibility",
             ),
             (
@@ -291,7 +336,7 @@ class ValidatorTests(unittest.TestCase):
                     skill = case_root / "skills" / "rpacore-project-setup" / "SKILL.md"
                     text = skill.read_text(encoding="utf-8")
                     self.assertIn(old, text)
-                    replace_all = {"compatibility-route", "manifest-route"}
+                    replace_all = {"compatibility-route"}
                     replacement_count = -1 if name in replace_all else 1
                     skill.write_text(
                         text.replace(old, new, replacement_count),
@@ -315,7 +360,7 @@ class ValidatorTests(unittest.TestCase):
                 entry = dict(original)
                 entry[field] = value
                 with self.assertRaisesRegex(VALIDATOR.ValidationError, expected):
-                    VALIDATOR._validate_skill(
+                    VALIDATOR._validate_skill_source(
                         repo_root=self.repo_root,
                         entry=entry,
                         docs_base=core["docs_base"],

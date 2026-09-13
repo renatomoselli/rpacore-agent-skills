@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "companion": {
+    "version": "0.1.0-dev.0",
+    "status": "development-only",
+    "license": "Apache-2.0"
+  },
+  "core": {
+    "version_spec": "==0.3.0",
+    "commit": "493252649ee6b9d387008e6b7ed41908e2733f46",
+    "docs_base": "https://github.com/renatomoselli/rpacore/blob/493252649ee6b9d387008e6b7ed41908e2733f46/docs",
+    "published_release": true
+  }
+}

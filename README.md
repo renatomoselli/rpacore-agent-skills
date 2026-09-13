@@ -29,19 +29,23 @@ workflow, and a narrow defect review need not become product discovery.
 
 The seven directories under skills/ are the single editable instruction source.
 Core public documentation owns API and runtime semantics; skills link to the
-immutable documentation baseline recorded in [manifest.toml](manifest.toml).
-Keep the manifest with the source tree when inspecting or evaluating it.
-Copying an isolated skill directory loses its relative compatibility reference.
+immutable documentation baseline recorded in the schema-version-2
+[manifest.toml](manifest.toml).
+Each canonical folder includes a generated `references/compatibility.json`
+derived from that manifest, so a validated folder remains self-contained when
+copied without its parent repository.
 
-Before using a skill, compare rpacore version with the manifest. Version text
+Before using a detached skill, compare `rpacore version` with its local
+`references/compatibility.json`. Version text
 alone is not consumer proof: the maintainer checks also compare a wheel's
 Python files with the selected commit and its installed bytes with that wheel.
 The Core published_release flag is independent of companion development status.
 
-Future harness packages may wrap this tree, preserving its manifest and links,
-but must not maintain edited copies. Git/project use, Pi/npm, Claude, Codex,
-OpenCode, and GitHub Copilot are independent future distribution decisions.
-A local validation result does not establish support for any of them.
+Portable candidates mechanically copy this tree and must not maintain edited
+instructions. See [portable distribution](docs/distribution.md) and the
+[no-publish dossier](docs/portable-release-dossier.md). Git/project use,
+Pi/npm, Claude, Codex, OpenCode, and GitHub Copilot remain independently
+verified support decisions; a local validation result establishes none of them.
 
 ## Maintainer validation
 
@@ -59,10 +63,12 @@ After reviewing a skill edit, regenerate only its manifest hash:
 python scripts/validate_skills.py --repo-root . --write
 ```
 
-All structural, content, and link rules still apply in write mode. Invalid
-content is rejected before the manifest changes. Preserve
-`* text=auto eol=lf` in .gitattributes: hashes cover actual UTF-8/LF skill bytes,
-and the tool does not silently rewrite CRLF files.
+All structural, content, and link rules still apply in write mode. Missing
+generated compatibility resources are bootstrapped; invalid pending output is
+rejected before any generated compatibility resource or manifest hash changes.
+The final replacements roll back together if a late write or validation fails.
+Preserve `* text=auto eol=lf` in .gitattributes: hashes cover actual UTF-8/LF
+skill bytes, and the tool does not silently rewrite CRLF files.
 
 Use the [maintainer guide](docs/maintaining.md) for exact-baseline checks,
 installed-wheel consumer scenarios, evidence receipts, and baseline updates.

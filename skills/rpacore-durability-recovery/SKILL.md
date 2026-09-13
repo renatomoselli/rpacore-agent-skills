@@ -6,8 +6,8 @@ description: Design and verify durable RPA Core execution and recovery. Use for 
 # Build durable execution and recovery
 
 Run the project's `rpacore version` and compare it with the exact supported
-version in [`manifest.toml`](../../manifest.toml). Stop on a mismatch or a
-missing manifest; do not guess compatibility from a skill copied on its own.
+version in [`references/compatibility.json`](references/compatibility.json).
+Stop on a mismatch or a missing resource; do not guess compatibility.
 
 Read [Durability and Storage](https://github.com/renatomoselli/rpacore/blob/493252649ee6b9d387008e6b7ed41908e2733f46/docs/durability.md) and the
 [API reference](https://github.com/renatomoselli/rpacore/blob/493252649ee6b9d387008e6b7ed41908e2733f46/docs/api.md) for checkpoint timing and exact signatures.

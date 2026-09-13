@@ -6,8 +6,8 @@ description: Test and review RPA Core automations against public contracts. Use 
 # Test and review an RPA Core automation
 
 Run the project's `rpacore version` and compare it with the exact supported
-version in [`manifest.toml`](../../manifest.toml). Stop on a mismatch or a
-missing manifest; do not guess compatibility from a skill copied on its own.
+version in [`references/compatibility.json`](references/compatibility.json).
+Stop on a mismatch or a missing resource; do not guess compatibility.
 
 Use [Testing RPA Core Steps](https://github.com/renatomoselli/rpacore/blob/493252649ee6b9d387008e6b7ed41908e2733f46/docs/testing.md),
 the [API reference](https://github.com/renatomoselli/rpacore/blob/493252649ee6b9d387008e6b7ed41908e2733f46/docs/api.md), and relevant behavior docs.
