@@ -87,6 +87,29 @@ class ValidatorTests(unittest.TestCase):
         with self.assertRaisesRegex(VALIDATOR.ValidationError, "SHA-256 mismatch"):
             VALIDATOR.validate_repository(self.repo_root)
 
+    def test_write_regeneration_round_trip_updates_only_hashes(self) -> None:
+        skill = self.repo_root / "skills" / "rpacore-project-setup" / "SKILL.md"
+        skill.write_text(
+            skill.read_text(encoding="utf-8") + "\nRegeneration probe.\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        with self.assertRaisesRegex(VALIDATOR.ValidationError, "SHA-256 mismatch"):
+            VALIDATOR.validate_repository(self.repo_root)
+
+        before = (self.repo_root / "manifest.toml").read_text(encoding="utf-8").splitlines()
+        VALIDATOR.validate_repository(self.repo_root, write_hashes=True)
+        VALIDATOR.validate_repository(self.repo_root)
+        after = (self.repo_root / "manifest.toml").read_text(encoding="utf-8").splitlines()
+
+        self.assertEqual(
+            [line for line in before if "sha256" not in line],
+            [line for line in after if "sha256" not in line],
+        )
+        changed = [(old, new) for old, new in zip(before, after) if old != new]
+        self.assertEqual(len(changed), 1)
+        self.assertTrue(all("sha256" in old for old, _ in changed))
+
     def test_unexpected_frontmatter_field_is_rejected(self) -> None:
         skill = self.repo_root / "skills" / "rpacore-project-setup" / "SKILL.md"
         text = skill.read_text(encoding="utf-8").replace(
