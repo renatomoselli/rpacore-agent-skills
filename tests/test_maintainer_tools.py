@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import os
 from pathlib import Path
 import re
 import shutil
@@ -122,6 +123,31 @@ class HashMaintenanceTests(unittest.TestCase):
             replace_files(self.root, pending, lambda: None)
 
         self.assert_tree_unchanged(before)
+        self.assert_no_transaction_temps()
+
+    def test_transaction_accepts_equivalent_windows_short_path(self) -> None:
+        if os.name != "nt":
+            self.skipTest("Windows short-path alias test")
+        import ctypes
+
+        target = self.root / "manifest.toml"
+        buffer = ctypes.create_unicode_buffer(32768)
+        length = ctypes.windll.kernel32.GetShortPathNameW(
+            str(self.root), buffer, len(buffer)
+        )
+        if not length or length >= len(buffer):
+            self.skipTest("Windows short paths unavailable")
+        short_root = Path(buffer.value)
+        if str(short_root).casefold() == str(self.root).casefold():
+            self.skipTest("temporary directory has no distinct short-path alias")
+
+        replace_files(
+            self.root,
+            {short_root / target.name: b"short-path update\n"},
+            lambda: None,
+        )
+
+        self.assertEqual(target.read_bytes(), b"short-path update\n")
         self.assert_no_transaction_temps()
 
     def test_validation_failure_restores_tree_and_cleans_temporary(self) -> None:

@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -93,6 +94,37 @@ class ReceiptTests(unittest.TestCase):
         self.assertEqual(
             set(receipt["packaging_inputs"]), set(consumer.validate_skills.PACKAGING_INPUTS)
         )
+
+    def test_consumer_keeps_virtual_environment_python_symlink(self) -> None:
+        base_python = self.root / "base-python"
+        base_python.write_bytes(b"executable placeholder")
+        venv_python = self.root / "consumer-venv" / (
+            "Scripts/python.exe" if os.name == "nt" else "bin/python"
+        )
+        venv_python.parent.mkdir(parents=True)
+        try:
+            venv_python.symlink_to(base_python)
+        except OSError as exc:
+            self.skipTest(f"symlinks unavailable: {exc}")
+
+        wheel = self.root / "core.whl"
+        wheel.write_bytes(b"wheel")
+        manifest = {"core": {"version_spec": "==0.3.0", "commit": "a" * 40}}
+        completed = subprocess.CompletedProcess([], 0, '{"passed": true}', "")
+        args = SimpleNamespace(
+            repo_root=self.root,
+            core_repo=self.root,
+            wheel=wheel,
+            python=venv_python,
+        )
+        with patch.object(consumer, "validate_repository", return_value=manifest), \
+             patch.object(consumer, "wheel_contract", return_value={}), \
+             patch.object(consumer.subprocess, "run", return_value=completed) as run:
+            consumer.run_checks(args)
+
+        command = run.call_args.args[0]
+        self.assertEqual(Path(command[0]), venv_python.absolute())
+        self.assertNotEqual(Path(command[0]), base_python.resolve())
 
 
 class BaselineRunTests(unittest.TestCase):

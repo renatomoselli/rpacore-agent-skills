@@ -71,7 +71,10 @@ def run_checks(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, Any]
     manifest = validate_repository(repo, core_repo=args.core_repo)
     version = manifest["core"]["version_spec"].removeprefix("==")
     contract = wheel_contract(args.wheel, args.core_repo, manifest["core"]["commit"], version)
-    command = [str(args.python.resolve()), "-I", "-B", str(repo / "tests/consumer_scenarios.py")]
+    # POSIX virtual-environment interpreters are commonly symlinks to the base
+    # Python. Keep the absolute venv entrypoint instead of resolving out of the
+    # environment that owns the installed wheel.
+    command = [str(args.python.absolute()), "-I", "-B", str(repo / "tests/consumer_scenarios.py")]
     result = subprocess.run(command, input=json.dumps({"version": version, "files": contract}),
                             capture_output=True, text=True, timeout=300)
     print(result.stderr, file=sys.stderr, end="")
