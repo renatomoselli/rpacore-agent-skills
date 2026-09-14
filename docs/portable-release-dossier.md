@@ -31,8 +31,8 @@ recovery, diagnostics, reporting, testing.
 
 | Surface | Status | Required evidence before support claim |
 | --- | --- | --- |
-| Portable folders and ZIPs | Windows development check passed | Dirty-worktree build/check and deterministic tests pass; clean-commit Windows/Linux proof remains |
-| Exact Core consumer | Windows passed | Five installed-wheel scenarios passed from a fresh exact baseline; Linux remains hosted-only/unrun |
+| Portable folders and ZIPs | Windows and Ubuntu candidate gates passed | Clean-commit validation, tests, deterministic build, and non-repairing check pass on both hosted platforms; the exact run and source identity are recorded in the private closeout evidence |
+| Exact Core consumer | Windows and Ubuntu passed | Five installed-wheel scenarios pass from the exact Core baseline on both hosted platforms; the exact run and source identity are recorded in the private closeout evidence |
 | Direct immutable Git copy | partial | Isolated local Git source used; immutable public commit install and full upgrade/downgrade lifecycle remain |
 | Skills CLI 1.5.25 | failed | Telemetry-disabled fresh/list/repeat/remove passed, but repeat copy silently overwrote a modified skill; update had no local project entry |
 | OpenCode 1.14.30 discovery | Windows passed | All seven installed folders discovered from isolated `.agents/skills`; Linux remains unrun |

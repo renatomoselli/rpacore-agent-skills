@@ -161,7 +161,12 @@ class HashMaintenanceTests(unittest.TestCase):
             canonical_repository_path(self.root, self.root / "manifest.toml")
 
     def test_shared_path_policy_rejects_mocked_symlink_without_privilege(self) -> None:
-        symlinked_parent = self.root / "generated"
+        # canonical_repository_path resolves the root before walking it, so the
+        # mock must match the resolved spelling. On Windows the temporary
+        # directory can arrive as an 8.3 short-path alias (RUNNER~1) while
+        # resolve() returns the long form (runneradmin); matching the
+        # unresolved spelling never fires there.
+        symlinked_parent = self.root.resolve() / "generated"
         path_type = type(self.root)
         with patch.object(
             path_type,
@@ -182,7 +187,10 @@ class HashMaintenanceTests(unittest.TestCase):
 
         def resolve(path: Path, *args: object, **kwargs: object) -> Path:
             if path == root_alias:
-                return self.root
+                # resolve() promises a canonical path; returning the unresolved
+                # spelling breaks containment the same way a short-path alias
+                # does on Windows CI (see the test above).
+                return self.root.resolve()
             return original_resolve(path, *args, **kwargs)
 
         def record(path: Path) -> bool:
@@ -193,9 +201,10 @@ class HashMaintenanceTests(unittest.TestCase):
              patch.object(path_type, "is_symlink", autospec=True, side_effect=record):
             canonical_repository_path(root_alias, Path("generated/compatibility.json"))
 
-        self.assertIn(self.root / "generated", visited)
-        self.assertNotIn(self.root, visited)
-        self.assertNotIn(self.root.parent, visited)
+        resolved_root = self.root.resolve()
+        self.assertIn(resolved_root / "generated", visited)
+        self.assertNotIn(resolved_root, visited)
+        self.assertNotIn(resolved_root.parent, visited)
 
     def test_transaction_wraps_repository_root_resolution_failure(self) -> None:
         with patch.object(
