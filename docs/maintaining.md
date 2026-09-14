@@ -100,9 +100,9 @@ same source and output.
 The build contains a full pack, individual folders, deterministic archives, a
 complete payload/artifact inventory, and an adjacent inventory checksum. The
 inventory also identifies the manifest, validator, transaction helper,
-packager, license, notice, and installation guide inputs. `check`
-builds an independent expectation and does not repair missing, extra, or
-changed output files.
+shared repository-path policy, packager, license, notice, and installation
+guide inputs. `check` builds an independent expectation and does not repair
+missing, extra, or changed output files.
 
 A frozen build requires a HEAD-clean source, including no non-ignored untracked
 files, before producing an output. Commit first; then run the frozen build and

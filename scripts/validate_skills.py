@@ -16,6 +16,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Sequence
 
 from file_transaction import replace_files
+from repository_paths import canonical_repository_path
 
 NAME_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 VERSION_PATTERN = re.compile(r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$")
@@ -62,6 +63,7 @@ PACKAGING_INPUTS = (
     "docs/distribution.md",
     "scripts/file_transaction.py",
     "scripts/package_skills.py",
+    "scripts/repository_paths.py",
     "scripts/validate_skills.py",
 )
 
@@ -161,17 +163,11 @@ def repository_path(
     relative = PurePosixPath(value)
     if relative.is_absolute() or not relative.parts or ".." in relative.parts:
         raise ValidationError(f"{context}: unsafe repository path: {value}")
-    repo_root = repo_root.resolve()
-    candidate = repo_root.joinpath(*relative.parts)
-    try:
-        candidate.resolve().relative_to(repo_root)
-    except ValueError as exc:
-        raise ValidationError(f"{context}: path escapes repository: {value}") from exc
-    current = candidate
-    while current != repo_root:
-        if current.is_symlink():
-            raise ValidationError(f"{context}: path must not use symlinks: {value}")
-        current = current.parent
+    candidate = canonical_repository_path(
+        repo_root,
+        Path(*relative.parts),
+        error_factory=lambda message: ValidationError(f"{context}: {message}"),
+    )
     if require_file and not candidate.is_file():
         raise ValidationError(f"{context}: path must be a regular file: {value}")
     return candidate
@@ -528,8 +524,8 @@ def _pending_generated_files(
         entry = next(entry for entry in manifest["skills"] if entry["name"] == source.name)
         payloads[entry["path"]] = source.path.read_bytes()
         payloads[source.resource["path"]] = compatibility
-        pending[source.resource_path] = compatibility
-    pending[repo_root / "manifest.toml"] = _render_manifest_hashes(repo_root, payloads)
+        pending[source.resource_path.relative_to(repo_root)] = compatibility
+    pending[Path("manifest.toml")] = _render_manifest_hashes(repo_root, payloads)
     return pending
 
 
@@ -540,7 +536,7 @@ def _validate_pending_repository(
 ) -> None:
     with tempfile.TemporaryDirectory(prefix="rpacore-skills-write-") as directory:
         candidate = Path(directory)
-        (candidate / "manifest.toml").write_bytes(pending[repo_root / "manifest.toml"])
+        (candidate / "manifest.toml").write_bytes(pending[Path("manifest.toml")])
         for entry in entries:
             destination = repository_path(candidate, entry["path"], context="pending manifest.skills")
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -559,7 +555,9 @@ def _validate_pending_repository(
                 source_resource = repository_path(
                     repo_root, resource["path"], context="manifest.skills.resources"
                 )
-                resource_destination.write_bytes(pending[source_resource])
+                resource_destination.write_bytes(
+                    pending[source_resource.relative_to(repo_root)]
+                )
         validate_repository(candidate)
 
 

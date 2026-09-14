@@ -2,6 +2,7 @@ __pycache__/
 *.py[cod]
 .venv/
 validation-artifacts/
+/.skills-write-*.tmp
 
 # Local agent, review, and navigation tooling state
 .codegraph/

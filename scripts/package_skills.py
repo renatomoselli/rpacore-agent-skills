@@ -11,7 +11,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from typing import Any, Sequence
+from typing import Any, Iterator, Sequence
 import zipfile
 
 from validate_skills import (
@@ -88,12 +88,10 @@ def _copy(source: Path, destination: Path) -> None:
 
 
 def _write_zip(source: Path, destination: Path, prefix: str) -> None:
+    files = tuple(_iter_files(source))  # Finish path checks before creating output.
     destination.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
-        for path in sorted(candidate for candidate in source.rglob("*") if candidate.is_file()):
-            if path.is_symlink():
-                raise ValidationError(f"package output source must not be a symlink: {path}")
-            relative = path.relative_to(source).as_posix()
+        for relative, path in files:
             info = zipfile.ZipInfo(f"{prefix}/{relative}", ZIP_TIMESTAMP)
             info.compress_type = zipfile.ZIP_DEFLATED
             info.create_system = 3
@@ -101,23 +99,28 @@ def _write_zip(source: Path, destination: Path, prefix: str) -> None:
             archive.writestr(info, path.read_bytes(), compresslevel=9)
 
 
-def _walk_files(root: Path, relative_root: str | None = None) -> dict[str, bytes]:
+def _iter_files(root: Path, relative_root: str | None = None) -> Iterator[tuple[str, Path]]:
     base = root if relative_root is None else root / relative_root
     if base.is_symlink() or not base.is_dir():
         raise ValidationError(f"package output must be a real directory: {base}")
-    files: dict[str, bytes] = {}
     for path in sorted(base.rglob("*")):
         if path.is_symlink():
             raise ValidationError(f"package output must not contain symlinks: {path}")
         if path.is_file():
-            files[path.relative_to(root).as_posix()] = path.read_bytes()
-    return files
+            yield path.relative_to(root).as_posix(), path
+
+
+def _walk_files(root: Path, relative_root: str | None = None) -> dict[str, bytes]:
+    return {
+        relative: path.read_bytes()
+        for relative, path in _iter_files(root, relative_root)
+    }
 
 
 def _file_hashes(root: Path, relative_root: str) -> dict[str, str]:
     return {
-        relative: hashlib.sha256(payload).hexdigest()
-        for relative, payload in _walk_files(root, relative_root).items()
+        relative: sha256_of(path)
+        for relative, path in _iter_files(root, relative_root)
     }
 
 

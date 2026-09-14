@@ -23,7 +23,10 @@ retrying, for example:
 Remove-Item -LiteralPath validation-artifacts/portable -Recurse
 ```
 
-`check` compares the supplied output with a fresh build and never repairs it.
+`check` compares every supplied output byte with a fresh build and never repairs
+it. The comparison includes `release-inventory.json` and its adjacent checksum;
+those files are immutable handoff records, not an alternate source of truth for
+repairing a candidate.
 `--frozen` means HEAD-clean: tracked files must equal `HEAD`, and every
 non-ignored untracked file also rejects the build. Commit the reviewed source
 first, then run the frozen build/check. Untracked files gate intentionally so a
@@ -36,6 +39,8 @@ permits a development candidate whose inventory sets `working_tree_dirty` to
 Each skill is self-contained: keep `SKILL.md` and `references/compatibility.json`
 together. Compare the installed `rpacore version` with that local resource.
 Installing a skill never installs or upgrades RPA Core.
+Portable skill folders use an explicit allowlist; hidden metadata such as
+`.DS_Store` is rejected rather than silently included.
 
 ## Install without changing a user profile
 

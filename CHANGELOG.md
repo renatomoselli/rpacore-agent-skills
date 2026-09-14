@@ -29,6 +29,9 @@ All notable user-facing changes to RPA Core Agent Skills will be recorded here.
 - Make compatibility/hash regeneration a validated all-files transaction that
   bootstraps missing generated resources, and add a clean-tree `--frozen`
   package gate for release candidates.
+- Harden cross-platform path handling, interrupted-write hygiene, archive
+  symlink rejection, and frozen/inventory negative coverage before release
+  candidate freeze.
 - Receipt schema 2 replaces the schema-1 `skills` identity with
   `distributed_files` and complete packaging inputs. Schema-1 receipts are
   superseded and cannot be rechecked by this verifier; retain their original

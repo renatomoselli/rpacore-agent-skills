@@ -59,6 +59,20 @@ class ReceiptTests(unittest.TestCase):
         with self.assertRaisesRegex(ValidationError, "not valid UTF-8 JSON"):
             consumer.emit_or_check_receipt(self.receipt, check_path=self.path)
 
+    def test_schema_mismatch_has_recovery_diagnostic(self) -> None:
+        current = dict(self.receipt, schema_version=2)
+        for previous_schema in (1, None):
+            with self.subTest(previous_schema=previous_schema):
+                previous = dict(self.receipt)
+                if previous_schema is None:
+                    previous.pop("schema_version")
+                self.path.write_text(json.dumps(previous), encoding="utf-8")
+                with self.assertRaisesRegex(
+                    ValidationError,
+                    "incompatible.*superseded.*retain.*verifier.*regenerate",
+                ):
+                    consumer.emit_or_check_receipt(current, check_path=self.path)
+
     def test_consumer_failure_or_invalid_output_writes_no_receipt(self) -> None:
         args = ["--repo-root", str(self.root), "--core-repo", str(self.root),
                 "--wheel", str(self.root / "core.whl"), "--python", sys.executable,

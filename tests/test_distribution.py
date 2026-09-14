@@ -127,6 +127,35 @@ class DistributionTests(unittest.TestCase):
         self.assertFalse(inventory["source"]["working_tree_dirty"])
         PACKAGER.check(self.source, output, frozen=True)
 
+    def test_frozen_build_rejects_staged_modification(self) -> None:
+        self.use_isolated_source()
+        readme = self.source / "README.md"
+        readme.write_bytes(readme.read_bytes() + b"\nStaged release probe.\n")
+        subprocess.run(
+            ["git", "add", "README.md"],
+            cwd=self.source,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        output = self.root / "frozen-staged"
+        with self.assertRaisesRegex(PACKAGER.ValidationError, "clean Git worktree"):
+            PACKAGER.build(self.source, output, frozen=True)
+        self.assertFalse(output.exists())
+
+    def test_ignored_interrupted_transaction_temp_does_not_poison_frozen_build(self) -> None:
+        self.use_isolated_source()
+        orphan = self.source / ".skills-write-interrupted.tmp"
+        orphan.write_bytes(b"incomplete generated content\n")
+
+        output = self.root / "frozen-after-interruption"
+        inventory = PACKAGER.build(self.source, output, frozen=True)
+
+        self.assertFalse(inventory["source"]["working_tree_dirty"])
+        self.assertNotIn(orphan.name, PACKAGER._output_files(output))
+        PACKAGER.check(self.source, output, frozen=True)
+
     def test_in_tree_output_must_be_explicitly_git_ignored(self) -> None:
         self.use_isolated_source()
         rejected = self.source / "skills" / "staging"
@@ -156,6 +185,38 @@ class DistributionTests(unittest.TestCase):
         (missing_output / "full/skills/rpacore-project-setup/references/compatibility.json").unlink()
         with self.assertRaisesRegex(PACKAGER.ValidationError, "inventory mismatch"):
             PACKAGER.check(self.source, missing_output)
+
+    def test_tampered_inventory_and_checksum_are_rejected_without_repair(self) -> None:
+        for name, relative in (
+            ("inventory", "release-inventory.json"),
+            ("checksum", "release-inventory.sha256"),
+        ):
+            with self.subTest(name=name):
+                output = self.build(f"tampered-{name}")
+                path = output / relative
+                path.write_bytes(path.read_bytes() + b"tampered\n")
+                tampered = path.read_bytes()
+                with self.assertRaisesRegex(PACKAGER.ValidationError, "content mismatch"):
+                    PACKAGER.check(self.source, output)
+                self.assertEqual(path.read_bytes(), tampered)
+
+        coordinated = self.build("tampered-inventory-and-checksum")
+        inventory_path = coordinated / "release-inventory.json"
+        inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+        inventory["profile"] = "tampered"
+        inventory_path.write_text(
+            json.dumps(inventory, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        checksum_path = coordinated / "release-inventory.sha256"
+        checksum_path.write_text(
+            f"{PACKAGER.sha256_of(inventory_path)}  release-inventory.json\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        with self.assertRaisesRegex(PACKAGER.ValidationError, "content mismatch"):
+            PACKAGER.check(self.source, coordinated)
 
     def test_source_path_escape_and_allowlist_are_rejected(self) -> None:
         self.use_isolated_source()
@@ -193,6 +254,51 @@ class DistributionTests(unittest.TestCase):
             with self.assertRaisesRegex(OSError, "controlled failure"):
                 PACKAGER.build(self.source, failed)
         self.assertFalse(failed.exists())
+
+
+class ArchiveSafetyTests(unittest.TestCase):
+    def setUp(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.source = self.root / "zip-source"
+        (self.source / "nested").mkdir(parents=True)
+        (self.source / "nested/payload.txt").write_text(
+            "payload\n", encoding="utf-8", newline="\n"
+        )
+
+    def test_walk_files_returns_relative_payloads(self) -> None:
+        self.assertEqual(
+            PACKAGER._walk_files(self.source),
+            {"nested/payload.txt": b"payload\n"},
+        )
+
+    def test_walk_files_rejects_mocked_symlink_without_privilege(self) -> None:
+        payload = self.source / "nested/payload.txt"
+        with patch.object(
+            type(payload),
+            "is_symlink",
+            autospec=True,
+            side_effect=lambda path: path == payload,
+        ):
+            with self.assertRaisesRegex(
+                PACKAGER.ValidationError, "must not contain symlinks"
+            ):
+                PACKAGER._walk_files(self.source)
+
+    def test_walk_and_zip_reject_directory_symlink_when_supported(self) -> None:
+        link = self.source / "linked-directory"
+        try:
+            link.symlink_to(self.source / "nested", target_is_directory=True)
+        except OSError as exc:
+            self.skipTest(f"directory symlinks unavailable: {exc}")
+
+        with self.assertRaisesRegex(PACKAGER.ValidationError, "must not contain symlinks"):
+            PACKAGER._walk_files(self.source)
+        destination = self.root / "archives" / "unsafe.zip"
+        with self.assertRaisesRegex(PACKAGER.ValidationError, "must not contain symlinks"):
+            PACKAGER._write_zip(self.source, destination, "unsafe")
+        self.assertFalse(destination.exists())
 
 
 if __name__ == "__main__":

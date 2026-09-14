@@ -11,10 +11,12 @@ import sys
 import tempfile
 import tomllib
 import unittest
+from unittest.mock import patch
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
-from file_transaction import TEMP_PREFIX, replace_files
+from file_transaction import FileTransactionError, TEMP_PREFIX, replace_files
+from repository_paths import RepositoryPathError, canonical_repository_path
 import validate_skills as validator
 import verify_consumer as consumer
 
@@ -115,8 +117,8 @@ class HashMaintenanceTests(unittest.TestCase):
         blocker.write_text("not a directory\n", encoding="utf-8", newline="\n")
         before = tree_state(self.root)
         pending = {
-            manifest_path: manifest_path.read_bytes() + b"\n",
-            blocker / "child": b"cannot be written\n",
+            manifest_path.relative_to(self.root): manifest_path.read_bytes() + b"\n",
+            Path("blocked-parent/child"): b"cannot be written\n",
         }
 
         with self.assertRaises(OSError):
@@ -142,12 +144,83 @@ class HashMaintenanceTests(unittest.TestCase):
             self.skipTest("temporary directory has no distinct short-path alias")
 
         replace_files(
-            self.root,
-            {short_root / target.name: b"short-path update\n"},
+            short_root,
+            {Path(target.name): b"short-path update\n"},
             lambda: None,
         )
 
         self.assertEqual(target.read_bytes(), b"short-path update\n")
+        self.assert_no_transaction_temps()
+
+    def test_shared_path_policy_makes_relative_paths_repository_relative(self) -> None:
+        self.assertEqual(
+            canonical_repository_path(self.root, Path("manifest.toml")),
+            (self.root / "manifest.toml").resolve(),
+        )
+        with self.assertRaisesRegex(RepositoryPathError, "repository-relative"):
+            canonical_repository_path(self.root, self.root / "manifest.toml")
+
+    def test_shared_path_policy_rejects_mocked_symlink_without_privilege(self) -> None:
+        symlinked_parent = self.root / "generated"
+        path_type = type(self.root)
+        with patch.object(
+            path_type,
+            "is_symlink",
+            autospec=True,
+            side_effect=lambda path: path == symlinked_parent,
+        ):
+            with self.assertRaisesRegex(RepositoryPathError, "must not use symlinks"):
+                canonical_repository_path(
+                    self.root, Path("generated/compatibility.json")
+                )
+
+    def test_shared_path_policy_stops_lexical_walk_at_resolved_root(self) -> None:
+        visited: list[Path] = []
+        path_type = type(self.root)
+        original_resolve = path_type.resolve
+        root_alias = self.root.parent / "root-alias"
+
+        def resolve(path: Path, *args: object, **kwargs: object) -> Path:
+            if path == root_alias:
+                return self.root
+            return original_resolve(path, *args, **kwargs)
+
+        def record(path: Path) -> bool:
+            visited.append(path)
+            return False
+
+        with patch.object(path_type, "resolve", autospec=True, side_effect=resolve), \
+             patch.object(path_type, "is_symlink", autospec=True, side_effect=record):
+            canonical_repository_path(root_alias, Path("generated/compatibility.json"))
+
+        self.assertIn(self.root / "generated", visited)
+        self.assertNotIn(self.root, visited)
+        self.assertNotIn(self.root.parent, visited)
+
+    def test_transaction_wraps_repository_root_resolution_failure(self) -> None:
+        with patch.object(
+            type(self.root), "resolve", autospec=True, side_effect=OSError("blocked")
+        ):
+            with self.assertRaisesRegex(FileTransactionError, "could not resolve"):
+                replace_files(self.root, {}, lambda: None)
+
+    def test_transaction_rejects_symlinked_parent_when_supported(self) -> None:
+        real_parent = self.root / "real-parent"
+        real_parent.mkdir()
+        linked_parent = self.root / "linked-parent"
+        try:
+            linked_parent.symlink_to(real_parent, target_is_directory=True)
+        except OSError as exc:
+            self.skipTest(f"directory symlinks unavailable: {exc}")
+
+        target = linked_parent / "generated.txt"
+        with self.assertRaisesRegex(FileTransactionError, "must not use symlinks"):
+            replace_files(
+                self.root,
+                {target.relative_to(self.root): b"generated\n"},
+                lambda: None,
+            )
+        self.assertFalse((real_parent / target.name).exists())
         self.assert_no_transaction_temps()
 
     def test_validation_failure_restores_tree_and_cleans_temporary(self) -> None:
@@ -155,8 +228,8 @@ class HashMaintenanceTests(unittest.TestCase):
         resource = self.root / "skills/rpacore-project-setup/references/compatibility.json"
         before = tree_state(self.root)
         pending = {
-            manifest_path: manifest_path.read_bytes() + b"\n",
-            resource: b"{}\n",
+            manifest_path.relative_to(self.root): manifest_path.read_bytes() + b"\n",
+            resource.relative_to(self.root): b"{}\n",
         }
 
         def reject() -> None:
@@ -179,7 +252,9 @@ class HashMaintenanceTests(unittest.TestCase):
             raise ControlledAbort()
 
         with self.assertRaises(ControlledAbort):
-            replace_files(self.root, {resource: b"{}\n"}, abort)
+            replace_files(
+                self.root, {resource.relative_to(self.root): b"{}\n"}, abort
+            )
 
         self.assert_tree_unchanged(before)
         self.assert_no_transaction_temps()
@@ -200,7 +275,7 @@ class HashMaintenanceTests(unittest.TestCase):
         with self.assertRaisesRegex(validator.ValidationError, "generated compatibility"):
             replace_files(
                 self.root,
-                {resource: b"{}\n"},
+                {resource.relative_to(self.root): b"{}\n"},
                 lambda: validator.validate_repository(self.root),
             )
 

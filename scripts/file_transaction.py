@@ -12,43 +12,28 @@ from pathlib import Path
 import stat
 import tempfile
 
+from repository_paths import canonical_repository_path
+
 
 TEMP_PREFIX = ".skills-write-"
 
 
 class FileTransactionError(OSError):
-    """A caught replacement failure could not be rolled back completely."""
-
-
-def _canonical_target(repo_root: Path, raw_path: Path) -> Path:
-    """Return a contained target while rejecting symlinks in its source spelling."""
-    try:
-        target = raw_path.resolve()
-        target.relative_to(repo_root)
-    except (OSError, ValueError) as exc:
-        raise FileTransactionError(
-            f"transaction path escapes repository: {raw_path}"
-        ) from exc
-
-    current = raw_path
-    while current.resolve() != repo_root:
-        if current.is_symlink():
-            raise FileTransactionError(f"refusing to replace through a symlink: {raw_path}")
-        parent = current.parent
-        if parent == current:
-            raise FileTransactionError(f"transaction path escapes repository: {raw_path}")
-        current = parent
-    return target
+    """A replacement was rejected or caught-failure rollback was incomplete."""
 
 
 def replace_files(
     repo_root: Path, pending: Mapping[Path, bytes], validate: Callable[[], None]
 ) -> None:
-    """Stage replacements and try to restore originals after a caught failure."""
-    repo_root = repo_root.resolve()
+    """Replace repository-relative files and restore them after a caught failure."""
+    repo_root = canonical_repository_path(
+        repo_root, Path("."), error_factory=FileTransactionError
+    )
     changed: dict[Path, tuple[bytes | None, int | None, bytes]] = {}
-    for raw_path, payload in pending.items():
-        path = _canonical_target(repo_root, raw_path)
+    for relative_path, payload in pending.items():
+        path = canonical_repository_path(
+            repo_root, relative_path, error_factory=FileTransactionError
+        )
         original = path.read_bytes() if path.exists() else None
         original_mode = stat.S_IMODE(path.stat().st_mode) if original is not None else None
         if original != payload:

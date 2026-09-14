@@ -127,6 +127,15 @@ def emit_or_check_receipt(receipt: dict[str, Any], *, receipt_path: Path | None 
             previous = json.loads(check_path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
             raise ValidationError(f"receipt is not valid UTF-8 JSON: {check_path}") from exc
+        previous_schema = previous.get("schema_version") if isinstance(previous, dict) else None
+        current_schema = receipt.get("schema_version")
+        if isinstance(previous, dict) and previous_schema != current_schema:
+            raise ValidationError(
+                f"receipt schema {previous_schema!r} is incompatible with the "
+                f"schema-{current_schema!r} verifier; schema-1 or missing-schema "
+                "evidence is superseded by schema 2, so retain the matching original "
+                "verifier with that evidence or regenerate a current receipt"
+            )
         if previous != receipt:
             raise ValidationError(
                 "receipt is stale or describes different verification inputs/results; "
