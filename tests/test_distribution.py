@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -10,6 +11,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from tests.support import make_git_source
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts" / "package_skills.py"
@@ -19,25 +22,6 @@ if SPEC is None or SPEC.loader is None:
 PACKAGER = importlib.util.module_from_spec(SPEC)
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 SPEC.loader.exec_module(PACKAGER)
-
-
-def make_git_source(destination: Path) -> Path:
-    shutil.copytree(
-        REPO_ROOT,
-        destination,
-        ignore=shutil.ignore_patterns(".git", "validation-artifacts", "__pycache__", "*.pyc"),
-    )
-    commands = (
-        ("git", "init", "--quiet"),
-        ("git", "config", "user.email", "distribution@example.invalid"),
-        ("git", "config", "user.name", "Distribution Test"),
-        ("git", "add", "."),
-        ("git", "commit", "--quiet", "-m", "fixture"),
-    )
-    for command in commands:
-        subprocess.run(command, cwd=destination, check=True, capture_output=True, text=True)
-    return destination
-
 
 class PackageCliTests(unittest.TestCase):
     def test_help_exposes_bounded_commands_and_explicit_arguments(self) -> None:
@@ -90,6 +74,14 @@ class DistributionTests(unittest.TestCase):
         expected_individual_files = sum(1 + len(entry["resources"]) + 3 for entry in skills)
         self.assertEqual(inventory["profile"], "portable")
         self.assertFalse(inventory["source"]["working_tree_dirty"])
+        self.assertEqual(
+            inventory["companion"],
+            {
+                "version": manifest["companion_version"],
+                "status": manifest["status"],
+                "license": manifest["license"],
+            },
+        )
         self.assertEqual(
             len(inventory["files"]), expected_full_files + expected_individual_files
         )
@@ -211,7 +203,7 @@ class DistributionTests(unittest.TestCase):
         )
         checksum_path = coordinated / "release-inventory.sha256"
         checksum_path.write_text(
-            f"{PACKAGER.sha256_of(inventory_path)}  release-inventory.json\n",
+            PACKAGER.inventory_checksum_text(PACKAGER.sha256_of(inventory_path)),
             encoding="utf-8",
             newline="\n",
         )
@@ -267,13 +259,15 @@ class ArchiveSafetyTests(unittest.TestCase):
             "payload\n", encoding="utf-8", newline="\n"
         )
 
-    def test_walk_files_returns_relative_payloads(self) -> None:
+    def test_file_hashes_returns_relative_identities(self) -> None:
         self.assertEqual(
-            PACKAGER._walk_files(self.source),
-            {"nested/payload.txt": b"payload\n"},
+            PACKAGER.file_hashes(self.source),
+            {
+                "nested/payload.txt": hashlib.sha256(b"payload\n").hexdigest(),
+            },
         )
 
-    def test_walk_files_rejects_mocked_symlink_without_privilege(self) -> None:
+    def test_file_hashes_rejects_mocked_symlink_without_privilege(self) -> None:
         payload = self.source / "nested/payload.txt"
         with patch.object(
             type(payload),
@@ -284,7 +278,7 @@ class ArchiveSafetyTests(unittest.TestCase):
             with self.assertRaisesRegex(
                 PACKAGER.ValidationError, "must not contain symlinks"
             ):
-                PACKAGER._walk_files(self.source)
+                PACKAGER.file_hashes(self.source)
 
     def test_walk_and_zip_reject_directory_symlink_when_supported(self) -> None:
         link = self.source / "linked-directory"
@@ -294,7 +288,7 @@ class ArchiveSafetyTests(unittest.TestCase):
             self.skipTest(f"directory symlinks unavailable: {exc}")
 
         with self.assertRaisesRegex(PACKAGER.ValidationError, "must not contain symlinks"):
-            PACKAGER._walk_files(self.source)
+            PACKAGER.file_hashes(self.source)
         destination = self.root / "archives" / "unsafe.zip"
         with self.assertRaisesRegex(PACKAGER.ValidationError, "must not contain symlinks"):
             PACKAGER._write_zip(self.source, destination, "unsafe")

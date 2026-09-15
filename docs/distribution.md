@@ -1,8 +1,60 @@
 # Portable distribution
 
-This repository remains development-only. The commands here build and inspect
-local candidates; they do not publish, submit, list, or change repository
-visibility.
+This repository has stable source identity `0.1.0`. Publication is a separate
+fact: the supported public channel exists only when the immutable `v0.1.0`
+entry on the
+[GitHub releases page](https://github.com/renatomoselli/rpacore-agent-skills/releases)
+and its ten allowlisted assets are visible. The package commands here only
+build and inspect local candidates; they do not publish, submit, list, change
+repository settings, or modify a user profile.
+
+## Install from the immutable release
+
+Use GitHub CLI to download the full portable archive and its inventory into a
+new explicit directory:
+
+```powershell
+$release = "validation-artifacts/rpacore-agent-skills-v0.1.0"
+New-Item -ItemType Directory -Path $release
+gh release download v0.1.0 -R renatomoselli/rpacore-agent-skills -D $release `
+  -p rpacore-agent-skills-portable.zip `
+  -p release-inventory.json `
+  -p release-inventory.sha256
+```
+
+Verify the inventory checksum, then verify the full archive against the
+inventory. Stop on either mismatch:
+
+```powershell
+$expectedInventory = ((Get-Content "$release/release-inventory.sha256") -split "\s+")[0]
+$actualInventory = (Get-FileHash "$release/release-inventory.json" -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($actualInventory -ne $expectedInventory) { throw "release inventory checksum mismatch" }
+$inventory = Get-Content "$release/release-inventory.json" -Raw | ConvertFrom-Json
+$expectedArchive = $inventory.artifacts."archives/rpacore-agent-skills-portable.zip"
+$actualArchive = (Get-FileHash "$release/rpacore-agent-skills-portable.zip" -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($actualArchive -ne $expectedArchive) { throw "portable archive checksum mismatch" }
+```
+
+Extract into a new directory and inspect the seven folders under
+`rpacore-agent-skills/skills/`. Copy only the desired complete folders,
+including each `references/compatibility.json`, into an explicit project-local
+skill directory. For a single skill, download `<skill-name>.zip` with the same
+inventory files and verify its `archives/<skill-name>.zip` entry before
+extraction. Do not install from mutable branch HEAD or GitHub's generated
+source archive.
+
+GitHub CLI 2.100.0 also provides a preview generic installer. This route
+injects source-tracking frontmatter, so its installed bytes intentionally
+differ from the canonical archives:
+
+```powershell
+gh skill preview renatomoselli/rpacore-agent-skills rpacore-project-setup@v0.1.0
+gh skill install renatomoselli/rpacore-agent-skills --all --pin v0.1.0 --dir <disposable-directory>
+```
+
+Keep this preview route in a disposable explicit directory until its behavior
+is verified for the intended client. It does not establish native-client
+support, safe updates, or conflict handling.
 
 ## Build an immutable candidate
 
@@ -44,11 +96,11 @@ Portable skill folders use an explicit allowlist; hidden metadata such as
 
 ## Install without changing a user profile
 
-For direct Git use, check out a full 40-character commit, verify the candidate
-inventory, and copy either `full/skills/<name>` or `individual/<name>` into an
-explicit project-local skill directory. Do not use a mutable branch for a
-reproducible install. Before replacement or removal, compare the installed
-folder with the recorded inventory and preserve user modifications.
+For direct Git use, check out the full 40-character commit recorded by the
+release inventory and copy either `full/skills/<name>` or `individual/<name>`
+from a verified build into an explicit project-local skill directory. Before
+replacement or removal, compare the installed folder with the recorded
+inventory and preserve user modifications.
 
 The Skills CLI rehearsal requires Node.js 22.20 or newer, is pinned to
 `skills@1.5.25`, uses copy mode and an isolated project, and sets
@@ -65,7 +117,7 @@ On the 2026-09-12 Windows rehearsal, fresh install, list, repeated install, and
 remove returned zero. The local-source update reported that there were no
 project skills to update. More importantly, repeated `--copy` installation
 silently replaced a deliberately modified installed `SKILL.md`. Therefore the
-CLI lifecycle is not supported for this candidate: compare installed bytes
+Skills CLI lifecycle is not supported for this release: compare installed bytes
 against the prior inventory before invoking it, and do not claim its update or
 downgrade path until a pinned version passes conflict preservation. Targeted
 OpenCode removal retained the shared `.agents/skills` copies associated with
@@ -89,6 +141,11 @@ destructive replacement when installed bytes differ from the prior inventory;
 move the modified folder aside for review. Removing one route must not remove a
 same-named skill still owned by another route.
 
+For manual removal, first compare the installed folder with the release
+inventory. Remove only the exact explicit installation directory when it is
+unchanged; otherwise move it aside for review. GitHub CLI 2.100.0 exposes no
+`gh skill uninstall` command, so do not imply automatic ownership-safe removal.
+
 SkillsMP and skills.sh discovery are observations, not package-integrity gates.
 No directory appearance, ingestion timing, install count, or support claim is
-guaranteed by these local instructions.
+guaranteed by these instructions.

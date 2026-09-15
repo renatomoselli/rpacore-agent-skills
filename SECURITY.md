@@ -7,8 +7,10 @@ installation or use.
 
 ## Supported versions
 
-There is no supported release yet. The current repository is development-only.
-Security support begins when the first companion version is released.
+The stable companion line begins with `v0.1.0`. It is supported only after the
+immutable public release is visible; default-branch snapshots and development
+builds are not supported releases. Report issues against the exact tag and
+installed artifact digest whenever possible.
 
 ## Reporting a vulnerability
 

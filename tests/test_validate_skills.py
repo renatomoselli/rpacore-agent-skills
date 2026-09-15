@@ -240,17 +240,45 @@ class ValidatorTests(unittest.TestCase):
                     VALIDATOR._read_utf8_lf(path)
 
     def test_manifest_identity_invariants_fail_closed(self) -> None:
+        manifest_text = (self.repo_root / "manifest.toml").read_text(encoding="utf-8")
+        manifest_data = tomllib.loads(manifest_text)
+        current_version = manifest_data["companion_version"]
+        current_status = manifest_data["status"]
+        version_line = f'companion_version = "{current_version}"'
+        status_line = f'status = "{current_status}"'
+        alternate_status = (
+            VALIDATOR.DEVELOPMENT_STATUS
+            if current_status == VALIDATOR.RELEASE_STATUS
+            else VALIDATOR.RELEASE_STATUS
+        )
+        version_status_cases = (
+            ("9.8.7", VALIDATOR.RELEASE_STATUS),
+            ("9.8.7-dev.6", VALIDATOR.DEVELOPMENT_STATUS),
+        )
+        alternate_version, alternate_version_status = next(
+            case for case in version_status_cases if case[1] != current_status
+        )
         cases = (
             ("schema_version = 2", "schema_version = 1", "schema_version must be 2"),
             (
-                'companion_version = "0.1.0-dev.0"',
+                version_line,
                 'companion_version = "not-a-version"',
                 "invalid companion_version",
             ),
             (
-                'status = "development-only"',
+                status_line,
                 'status = "released"',
-                "must remain development-only",
+                "status must be one of",
+            ),
+            (
+                status_line,
+                f'status = "{alternate_status}"',
+                f"requires status {current_status!r}",
+            ),
+            (
+                version_line,
+                f'companion_version = "{alternate_version}"',
+                f"requires status {alternate_version_status!r}",
             ),
             ('license = "Apache-2.0"', 'license = "MIT"', "license must be Apache-2.0"),
             (

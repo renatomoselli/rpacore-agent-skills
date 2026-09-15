@@ -1,14 +1,16 @@
-# Portable candidate dossier
+# Portable release dossier
 
-This is a no-publish handoff for the shared portable package. It does not
-authorize a Git release, directory submission, telemetry, profile mutation, or
-native client wrapper.
+This is the reviewed handoff for preparing the shared portable `v0.1.0`
+release. Stable source identity does not prove that a public release exists.
+This file does not authorize a tag, GitHub release, repository setting or
+metadata change, directory submission, telemetry, profile mutation, or native
+client wrapper.
 
 ## Frozen identity
 
 - Product: RPA Core Agent Skills, seven skills
-- Companion version/status: `0.1.0-dev.0`, development-only
-- License: Apache-2.0; candidate includes `LICENSE` and `NOTICE`
+- Companion version/status: `0.1.0`, stable
+- License: Apache-2.0; release artifacts include `LICENSE` and `NOTICE`
 - Core: exactly `0.3.0` at
   `493252649ee6b9d387008e6b7ed41908e2733f46`
 - Source and artifacts: use the full commit and SHA-256 values in the generated
@@ -17,7 +19,32 @@ native client wrapper.
 - Support route: repository issue and private security routes documented in
   `README.md` and `SECURITY.md`
 
-## Candidate description
+## Proposed GitHub release
+
+- Tag/title: annotated `v0.1.0`; release title `RPA Core Agent Skills v0.1.0`
+- Target: the future clean release-source commit embedded in the final frozen
+  inventory; never mutable branch state
+- Description: `Portable agent skills for building reliable Python automations with RPA Core.`
+- Homepage: leave unset
+- Generic topics: `rpa`, `python`, `automation`, `durable-execution`
+- Listing-triggering topic, authorized separately: `agent-skills`
+- Support: public issues and the private vulnerability-reporting route in
+  `SECURITY.md`
+- Notes: `docs/release-notes-v0.1.0.md`
+
+The ten allowlisted assets are `rpacore-agent-skills-portable.zip`, the seven
+manifest-named individual skill ZIPs, `release-inventory.json`, and
+`release-inventory.sha256`. Upload them only from the final frozen build. The
+release CLI must use the existing annotated tag plus `--verify-tag`, create a
+draft with all assets, and leave that draft inspectable before publication.
+
+Before publication, a failed candidate is discarded and rebuilt from a new
+clean commit; removal of any draft or tag is a separately authorized action.
+After publication, never replace `v0.1.0`, its tag, or its assets. Publish a
+corrected later version and record the supersession through release notes,
+issues, or a security advisory as appropriate.
+
+## Release description
 
 Portable instructions for designing, testing, diagnosing, and recovering
 deterministic RPA Core automations through supported public APIs. The package
@@ -31,8 +58,8 @@ recovery, diagnostics, reporting, testing.
 
 | Surface | Status | Required evidence before support claim |
 | --- | --- | --- |
-| Portable folders and ZIPs | Windows and Ubuntu candidate gates passed | Clean-commit validation, tests, deterministic build, and non-repairing check pass on both hosted platforms; the exact run and source identity are recorded in the private closeout evidence |
-| Exact Core consumer | Windows and Ubuntu passed | Five installed-wheel scenarios pass from the exact Core baseline on both hosted platforms; the exact run and source identity are recorded in the private closeout evidence |
+| Portable folders and ZIPs | development candidate passed; stable candidate pending | Clean stable-source commit validation, tests, deterministic build, and non-repairing check pass on both hosted platforms |
+| Exact Core consumer | development candidate passed; stable candidate pending | Repeat all five installed-wheel scenarios from the exact Core baseline on both hosted platforms |
 | Direct immutable Git copy | partial | Isolated local Git source used; immutable public commit install and full upgrade/downgrade lifecycle remain |
 | Skills CLI 1.5.25 | failed | Telemetry-disabled fresh/list/repeat/remove passed, but repeat copy silently overwrote a modified skill; update had no local project entry |
 | OpenCode 1.14.30 discovery | Windows passed | All seven installed folders discovered from isolated `.agents/skills`; Linux remains unrun |
@@ -40,17 +67,35 @@ recovery, diagnostics, reporting, testing.
 | SkillsMP / skills.sh appearance | not observed | Public-source indexing observation after separately authorized release; no guaranteed listing |
 | Other portable clients | unverified | Primary client documentation and every applicable shared gate at a recorded version |
 
-Directory readiness, publication authorization, submission, listing, and
+Candidate readiness, publication authorization, release reachability, listing, and
 verified public installation must be recorded separately. Native Pi, Claude,
 Codex/Cursor/Copilot, and Gemini metadata belong to their later channel work.
 
+BL-060's new-shared-tool trigger fired when public-asset verification was added.
+The bounded extraction is complete here: `verify_release.py` owns release
+reconstruction, consumes the packager's canonical archive map and file walker,
+and uses shared test-repository support. The remaining optional cleanup family
+stays deferred because the package profile and distributed-resource/hash shape
+did not change.
+
+After publication, manually dispatch `.github/workflows/verify-release.yml`.
+It checks out the explicit tag input, downloads the public assets with read-only
+contents permission, requires the manifest-derived asset allowlist,
+reconstructs the full package for `check --frozen`, and verifies all seven
+full-pack plus individual-skill copies in runner-local disposable directories
+on Windows and Ubuntu.
+
 ## Release checklist
 
-1. Select a clean companion commit and rerun static, test, `build --frozen`,
+1. Select a clean stable companion commit and rerun static, test, `build --frozen`,
    `check --frozen`, exact-Core, installed-wheel, Windows, and Linux gates.
 2. Record the inventory and archive digests plus the client/OS commands and
    transcripts. Confirm cached local resources remain readable offline.
 3. Confirm owner, initial release version, immutable tag, publisher coordinates,
    support contact, replacement/deprecation procedure, and destination payload.
 4. Obtain separate authorization for each publication or listing-triggering
-   action. Verify public installation only after that action succeeds.
+   action. Keep the clean release-source commit, annotated tag, and ten-asset
+   draft contiguous; if the external gate cannot proceed, the supported public
+   channel remains unavailable rather than falling back to branch HEAD.
+5. After publication, dispatch the release-verification workflow with the exact
+   tag and attach its run URL plus both OS job conclusions to private evidence.

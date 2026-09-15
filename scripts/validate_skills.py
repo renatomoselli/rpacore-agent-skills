@@ -20,6 +20,8 @@ from repository_paths import canonical_repository_path
 
 NAME_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 VERSION_PATTERN = re.compile(r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$")
+RELEASE_STATUS = "stable"
+DEVELOPMENT_STATUS = "development-only"
 COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 FRONTMATTER_FIELD_PATTERN = re.compile(r"^([a-z][a-z0-9-]*): (.+)$")
 MARKDOWN_LINK_PATTERN = re.compile(r"\]\((https://[^)]+)\)")
@@ -206,6 +208,11 @@ def distributed_files(manifest: dict[str, Any]) -> dict[str, str]:
     return dict(sorted(files.items()))
 
 
+def _expected_companion_status(version: str) -> str:
+    """Map a SemVer prerelease suffix to the development support tier."""
+    return DEVELOPMENT_STATUS if "-" in version else RELEASE_STATUS
+
+
 def _validate_manifest_header(manifest: dict[str, Any]) -> dict[str, Any]:
     _require_exact_fields(manifest, EXPECTED_MANIFEST_FIELDS, context="manifest")
     if manifest.get("schema_version") != 2:
@@ -214,8 +221,16 @@ def _validate_manifest_header(manifest: dict[str, Any]) -> dict[str, Any]:
     if VERSION_PATTERN.fullmatch(version) is None:
         raise ValidationError(f"manifest: invalid companion_version: {version}")
     status = _manifest_string(manifest, "status", context="manifest")
-    if status != "development-only":
-        raise ValidationError("manifest: the unreleased foundation must remain development-only")
+    allowed_statuses = {DEVELOPMENT_STATUS, RELEASE_STATUS}
+    if status not in allowed_statuses:
+        raise ValidationError(
+            f"manifest: status must be one of {sorted(allowed_statuses)}"
+        )
+    expected_status = _expected_companion_status(version)
+    if status != expected_status:
+        raise ValidationError(
+            f"manifest: companion_version {version} requires status {expected_status!r}"
+        )
     if manifest.get("license") != "Apache-2.0":
         raise ValidationError("manifest: license must be Apache-2.0")
     if manifest.get("validation_python") != ">=3.11":

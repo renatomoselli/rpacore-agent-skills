@@ -1,0 +1,52 @@
+name: Verify Published Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Exact stable release tag to verify
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  public-assets:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Download the published assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $assets = Join-Path $PWD "validation-artifacts/release-assets"
+          New-Item -ItemType Directory -Path $assets
+          gh release download $env:RELEASE_TAG -R $env:GITHUB_REPOSITORY -D $assets
+          if ($LASTEXITCODE -ne 0) { throw "release download failed" }
+
+      - name: Verify published bytes and detached installs
+        run: >-
+          python scripts/verify_release.py
+          --repo-root .
+          --assets validation-artifacts/release-assets
+          --output validation-artifacts/release-candidate
+          --install-root validation-artifacts/release-install
+          --profile portable
+          --frozen

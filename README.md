@@ -3,11 +3,17 @@
 Portable guidance for coding agents building RPA Core automations through
 supported public APIs.
 
-This companion remains **development-only**, with no supported installation
-channel or companion release. Its selected Core baseline is the **released
-Core 0.3.0**, at commit
+This companion has stable source identity **0.1.0**. Its selected Core baseline
+is the **released Core 0.3.0**, at commit
 493252649ee6b9d387008e6b7ed41908e2733f46. Compatibility currently means
 exactly 0.3.0; later versions need their own validation.
+
+Publication is tracked separately from source identity. The supported public
+channel is the immutable `v0.1.0` entry on the
+[GitHub releases page](https://github.com/renatomoselli/rpacore-agent-skills/releases)
+once it and its ten documented assets are visible. If it is absent, there is
+not yet a supported public download; do not substitute default-branch HEAD or
+GitHub-generated source archives.
 
 ## Choose a workflow
 
@@ -25,6 +31,20 @@ exactly 0.3.0; later versions need their own validation.
 Use the relevant route for the request. A small change need not run every
 workflow, and a narrow defect review need not become product discovery.
 
+## Install the stable portable release
+
+Use the attached portable ZIPs, not GitHub's automatically generated source
+archive. Download the full pack plus `release-inventory.json` and
+`release-inventory.sha256`, verify both the inventory checksum and the ZIP's
+SHA-256 entry, then extract and copy only the selected skill folders into an
+explicit project-local directory. Never overwrite an existing folder until
+you have compared it with the prior inventory and preserved local changes.
+
+The exact Windows commands, individual-skill route, removal procedure, and
+bounded preview `gh skill install --pin v0.1.0` path are in
+[portable distribution](docs/distribution.md). Installation never installs or
+upgrades RPA Core.
+
 ## Source and compatibility
 
 The seven directories under skills/ are the single editable instruction source.
@@ -39,11 +59,11 @@ Before using a detached skill, compare `rpacore version` with its local
 `references/compatibility.json`. Version text
 alone is not consumer proof: the maintainer checks also compare a wheel's
 Python files with the selected commit and its installed bytes with that wheel.
-The Core published_release flag is independent of companion development status.
+The Core `published_release` flag is independent of companion release status.
 
-Portable candidates mechanically copy this tree and must not maintain edited
+Portable packages mechanically copy this tree and must not maintain edited
 instructions. See [portable distribution](docs/distribution.md) and the
-[no-publish dossier](docs/portable-release-dossier.md). Git/project use,
+[release dossier](docs/portable-release-dossier.md). Git/project use,
 Pi/npm, Claude, Codex, OpenCode, and GitHub Copilot remain independently
 verified support decisions; a local validation result establishes none of them.
 

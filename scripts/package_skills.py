@@ -11,7 +11,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from typing import Any, Iterator, Sequence
+from typing import Any, Iterator, NamedTuple, Sequence
 import zipfile
 
 from validate_skills import (
@@ -25,11 +25,25 @@ from validate_skills import (
 
 PROFILE = "portable"
 PACK_NAME = "rpacore-agent-skills"
+INVENTORY_NAME = "release-inventory.json"
+INVENTORY_CHECKSUM_NAME = "release-inventory.sha256"
 ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
+
+
+class ArchiveSpec(NamedTuple):
+    """Canonical ZIP prefix and staged package directory for one archive."""
+
+    prefix: str
+    staged_dir: str
 
 
 def sha256_of(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def inventory_checksum_text(digest: str) -> str:
+    """Render the canonical checksum-file content for the release inventory."""
+    return f"{digest}  {INVENTORY_NAME}\n"
 
 
 def _git_identity(source: Path) -> tuple[str, bool]:
@@ -110,14 +124,17 @@ def _iter_files(root: Path, relative_root: str | None = None) -> Iterator[tuple[
             yield path.relative_to(root).as_posix(), path
 
 
-def _walk_files(root: Path, relative_root: str | None = None) -> dict[str, bytes]:
+def _file_bytes(root: Path, relative_root: str | None = None) -> dict[str, bytes]:
     return {
         relative: path.read_bytes()
         for relative, path in _iter_files(root, relative_root)
     }
 
 
-def _file_hashes(root: Path, relative_root: str) -> dict[str, str]:
+def file_hashes(
+    root: Path, relative_root: str | None = None
+) -> dict[str, str]:
+    """Return canonical SHA-256 identities for a symlink-free file tree."""
     return {
         relative: sha256_of(path)
         for relative, path in _iter_files(root, relative_root)
@@ -163,12 +180,24 @@ def _stage_individuals(
             _copy(path, individual / destination)
 
 
+def archive_specs(manifest: dict[str, Any]) -> dict[str, ArchiveSpec]:
+    """Map each release archive name to its ZIP prefix and staged source."""
+    return {
+        f"{PACK_NAME}-portable.zip": ArchiveSpec(PACK_NAME, "full"),
+        **{
+            f"{entry['name']}.zip": ArchiveSpec(
+                entry["name"],
+                f"individual/{entry['name']}",
+            )
+            for entry in manifest["skills"]
+        },
+    }
+
+
 def _write_archives(output: Path, manifest: dict[str, Any]) -> None:
     archives = output / "archives"
-    _write_zip(output / "full", archives / f"{PACK_NAME}-portable.zip", PACK_NAME)
-    for entry in manifest["skills"]:
-        name = entry["name"]
-        _write_zip(output / "individual" / name, archives / f"{name}.zip", name)
+    for archive, spec in archive_specs(manifest).items():
+        _write_zip(output / spec.staged_dir, archives / archive, spec.prefix)
 
 
 def _build_inventory(
@@ -180,9 +209,9 @@ def _build_inventory(
     dirty: bool,
 ) -> dict[str, Any]:
     files = {}
-    files.update(_file_hashes(output, "full"))
-    files.update(_file_hashes(output, "individual"))
-    artifacts = _file_hashes(output, "archives")
+    files.update(file_hashes(output, "full"))
+    files.update(file_hashes(output, "individual"))
+    artifacts = file_hashes(output, "archives")
     inventory = {
         "schema_version": 1,
         "profile": PROFILE,
@@ -200,12 +229,12 @@ def _build_inventory(
             for relative in PACKAGING_INPUTS
         },
     }
-    inventory_path = output / "release-inventory.json"
+    inventory_path = output / INVENTORY_NAME
     inventory_path.write_text(
         json.dumps(inventory, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n"
     )
-    (output / "release-inventory.sha256").write_text(
-        f"{sha256_of(inventory_path)}  release-inventory.json\n",
+    (output / INVENTORY_CHECKSUM_NAME).write_text(
+        inventory_checksum_text(sha256_of(inventory_path)),
         encoding="utf-8",
         newline="\n",
     )
@@ -247,7 +276,7 @@ def build(
 
 
 def _output_files(root: Path) -> dict[str, bytes]:
-    return _walk_files(root)
+    return _file_bytes(root)
 
 
 def check(

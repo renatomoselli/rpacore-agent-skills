@@ -1,6 +1,6 @@
 schema_version = 2
-companion_version = "0.1.0-dev.0"
-status = "development-only"
+companion_version = "0.1.0"
+status = "stable"
 license = "Apache-2.0"
 validation_python = ">=3.11"
 
@@ -18,7 +18,7 @@ sha256 = "bba3097f366955e76c64182890afb21b307acd02608dc0ee87e0ea313b0b2a74"
 
 [[skills.resources]]
 path = "skills/rpacore-automation-development/references/compatibility.json"
-sha256 = "40c98e4dafd572d039d620f86a04afbda31898106d42d0a6f8c0453f3b7f52dc"
+sha256 = "3eeedd334d981025ff042cef5a7836c610fed5ab4604899b2dde6835cb521fb1"
 
 [[skills]]
 name = "rpacore-diagnostics-inspection"
@@ -27,7 +27,7 @@ sha256 = "cd18738ed6fc6403ce1e3d811c9143c66d1517443a1996fc39a15af1bc416d0e"
 
 [[skills.resources]]
 path = "skills/rpacore-diagnostics-inspection/references/compatibility.json"
-sha256 = "40c98e4dafd572d039d620f86a04afbda31898106d42d0a6f8c0453f3b7f52dc"
+sha256 = "3eeedd334d981025ff042cef5a7836c610fed5ab4604899b2dde6835cb521fb1"
 
 [[skills]]
 name = "rpacore-durability-recovery"
@@ -36,7 +36,7 @@ sha256 = "b77cf9091ed93c78a9e0b2291c5ed44746208cb564f7c3f39c2817d84808ad86"
 
 [[skills.resources]]
 path = "skills/rpacore-durability-recovery/references/compatibility.json"
-sha256 = "40c98e4dafd572d039d620f86a04afbda31898106d42d0a6f8c0453f3b7f52dc"
+sha256 = "3eeedd334d981025ff042cef5a7836c610fed5ab4604899b2dde6835cb521fb1"
 
 [[skills]]
 name = "rpacore-project-setup"
@@ -45,7 +45,7 @@ sha256 = "102de4313f12c5fcb04e511ab79c02616061941de7967f9bedd378a5c3169cce"
 
 [[skills.resources]]
 path = "skills/rpacore-project-setup/references/compatibility.json"
-sha256 = "40c98e4dafd572d039d620f86a04afbda31898106d42d0a6f8c0453f3b7f52dc"
+sha256 = "3eeedd334d981025ff042cef5a7836c610fed5ab4604899b2dde6835cb521fb1"
 
 [[skills]]
 name = "rpacore-queue-processing"
@@ -54,7 +54,7 @@ sha256 = "4eaf2bf9fc5a969bbfa4b4df2d290bc1032c209556804c41acf79e37a433927e"
 
 [[skills.resources]]
 path = "skills/rpacore-queue-processing/references/compatibility.json"
-sha256 = "40c98e4dafd572d039d620f86a04afbda31898106d42d0a6f8c0453f3b7f52dc"
+sha256 = "3eeedd334d981025ff042cef5a7836c610fed5ab4604899b2dde6835cb521fb1"
 
 [[skills]]
 name = "rpacore-reporting-notifications"
@@ -63,7 +63,7 @@ sha256 = "adebd5e2da6ddb495e197d05bdcaecedb239c91c2dbb0ab1988203cab3b7e611"
 
 [[skills.resources]]
 path = "skills/rpacore-reporting-notifications/references/compatibility.json"
-sha256 = "40c98e4dafd572d039d620f86a04afbda31898106d42d0a6f8c0453f3b7f52dc"
+sha256 = "3eeedd334d981025ff042cef5a7836c610fed5ab4604899b2dde6835cb521fb1"
 
 [[skills]]
 name = "rpacore-testing-review"
@@ -72,4 +72,4 @@ sha256 = "9f05d17f34f0327b58cc438d0229dc55e1123ce616ead52759e02f702d90675b"
 
 [[skills.resources]]
 path = "skills/rpacore-testing-review/references/compatibility.json"
-sha256 = "40c98e4dafd572d039d620f86a04afbda31898106d42d0a6f8c0453f3b7f52dc"
+sha256 = "3eeedd334d981025ff042cef5a7836c610fed5ab4604899b2dde6835cb521fb1"

@@ -117,6 +117,13 @@ Every skill intentionally carries its own byte-identical
 parent resource. Update those generated copies only through validator write
 mode.
 
+After an authorized release is public, download its complete asset set and run
+`scripts/verify_release.py` with explicit repository, asset, reconstructed
+output, install-output, and `portable` profile arguments. The verifier consumes
+the packager's archive map, runs the non-repairing package check, and compares
+all seven full-pack and individual-skill copies in disposable directories. The
+manually dispatched release workflow runs this gate on Windows and Ubuntu.
+
 ## Change the Core baseline
 
 Select a released Core version and exact commit explicitly. The manifest
@@ -125,8 +132,9 @@ untested future minor or patch range.
 
 Update commit, docs_base, version_spec, and the fact of Core published_release
 together. Update every skill's documentation links and API vocabulary.
-Companion status remains development-only until a separate release decision;
-a published Core release does not release the companion.
+Changing the Core baseline does not change companion release status. Update the
+companion version/status only under a separate release decision; a published
+Core release does not publish this companion.
 
 Review the README, changelog, and fixtures for implementation accuracy.
 Regenerate skill hashes, run the complete static suite and exact installed
