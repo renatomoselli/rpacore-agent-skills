@@ -3,17 +3,18 @@
 Portable guidance for coding agents building RPA Core automations through
 supported public APIs.
 
-This companion has stable source identity **0.1.0**. Its selected Core baseline
+This companion has stable source identity **0.1.1**. Its selected Core baseline
 is the **released Core 0.3.0**, at commit
 493252649ee6b9d387008e6b7ed41908e2733f46. Compatibility currently means
 exactly 0.3.0; later versions need their own validation.
 
-Publication is tracked separately from source identity. The supported public
-channel is the immutable `v0.1.0` entry on the
+Publication is tracked separately from source identity. The immutable `v0.1.0`
+assets remain intact, but their post-publication Linux rebuild exposed
+platform-dependent DEFLATE output. The supported public channel becomes
+`v0.1.1` on the
 [GitHub releases page](https://github.com/renatomoselli/rpacore-agent-skills/releases)
-once it and its ten documented assets are visible. If it is absent, there is
-not yet a supported public download; do not substitute default-branch HEAD or
-GitHub-generated source archives.
+only after it and its ten documented assets pass both hosted platforms. Until
+then, do not substitute default-branch HEAD or GitHub-generated source archives.
 
 ## Choose a workflow
 
@@ -41,7 +42,7 @@ explicit project-local directory. Never overwrite an existing folder until
 you have compared it with the prior inventory and preserved local changes.
 
 The exact Windows commands, individual-skill route, removal procedure, and
-bounded preview `gh skill install --pin v0.1.0` path are in
+bounded preview `gh skill install --pin v0.1.1` path are in
 [portable distribution](docs/distribution.md). Installation never installs or
 upgrades RPA Core.
 

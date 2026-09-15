@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build or check deterministic portable RPA Core skill packages."""
+"""Build, check, or compare deterministic portable RPA Core skill packages."""
 
 from __future__ import annotations
 
@@ -104,13 +104,13 @@ def _copy(source: Path, destination: Path) -> None:
 def _write_zip(source: Path, destination: Path, prefix: str) -> None:
     files = tuple(_iter_files(source))  # Finish path checks before creating output.
     destination.parent.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+    with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_STORED) as archive:
         for relative, path in files:
             info = zipfile.ZipInfo(f"{prefix}/{relative}", ZIP_TIMESTAMP)
-            info.compress_type = zipfile.ZIP_DEFLATED
+            info.compress_type = zipfile.ZIP_STORED
             info.create_system = 3
             info.external_attr = 0o100644 << 16
-            archive.writestr(info, path.read_bytes(), compresslevel=9)
+            archive.writestr(info, path.read_bytes())
 
 
 def _iter_files(root: Path, relative_root: str | None = None) -> Iterator[tuple[str, Path]]:
@@ -298,6 +298,49 @@ def check(
         raise ValidationError(f"package content mismatch: {changed}")
 
 
+def release_asset_paths(manifest: dict[str, Any]) -> list[str]:
+    """Return the ten published release files: eight archives plus inventory records."""
+    return [f"archives/{name}" for name in archive_specs(manifest)] + [
+        INVENTORY_NAME,
+        INVENTORY_CHECKSUM_NAME,
+    ]
+
+
+def _asset_bytes(candidate: Path, relative: str, side: str) -> bytes:
+    path = candidate / relative
+    if path.is_symlink() or not path.is_file():
+        raise ValidationError(f"release candidate {side} is missing {relative}")
+    return path.read_bytes()
+
+
+def compare(
+    repo_root: Path, first: Path, second: Path, *, profile: str = PROFILE
+) -> dict[str, str]:
+    """Require identical SHA-256 for every release asset in two build outputs.
+
+    Build each candidate on a different platform with ``build --frozen`` from
+    the same clean commit, then compare here before publication. Any divergence
+    in archive bytes, the inventory, or its checksum fails closed with the
+    offending file names.
+    """
+    if profile != PROFILE:
+        raise ValidationError(f"unsupported package profile: {profile}")
+    manifest = validate_repository(repo_root)
+    expected = release_asset_paths(manifest)
+    mismatched = sorted(
+        relative
+        for relative in expected
+        if hashlib.sha256(_asset_bytes(first, relative, "first")).hexdigest()
+        != hashlib.sha256(_asset_bytes(second, relative, "second")).hexdigest()
+    )
+    if mismatched:
+        raise ValidationError(f"release asset hash mismatch: {mismatched}")
+    return {
+        relative: hashlib.sha256(_asset_bytes(first, relative, "first")).hexdigest()
+        for relative in expected
+    }
+
+
 def _add_common_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--repo-root", type=Path, required=True, help="Canonical source repository")
     parser.add_argument("--profile", choices=[PROFILE], required=True)
@@ -314,6 +357,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     commands = parser.add_subparsers(dest="command", required=True)
     _add_common_arguments(commands.add_parser("build", help="Create a new deterministic output"))
     _add_common_arguments(commands.add_parser("check", help="Check an output without changing it"))
+    compare_parser = commands.add_parser(
+        "compare", help="Compare release asset hashes across two build outputs"
+    )
+    compare_parser.add_argument("--repo-root", type=Path, required=True, help="Canonical source repository")
+    compare_parser.add_argument("--profile", choices=[PROFILE], required=True)
+    compare_parser.add_argument("--first", type=Path, required=True, help="First candidate directory")
+    compare_parser.add_argument("--second", type=Path, required=True, help="Second candidate directory")
     return parser.parse_args(argv)
 
 
@@ -322,12 +372,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if args.command == "build":
             build(args.repo_root, args.output, profile=args.profile, frozen=args.frozen)
-        else:
+            target = str(args.output.resolve())
+        elif args.command == "check":
             check(args.repo_root, args.output, profile=args.profile, frozen=args.frozen)
+            target = str(args.output.resolve())
+        else:
+            compare(args.repo_root, args.first, args.second, profile=args.profile)
+            target = f"{args.first.resolve()} == {args.second.resolve()}"
     except (ValidationError, OSError, subprocess.CalledProcessError, zipfile.BadZipFile) as exc:
         print(f"Skill packaging failed: {exc}", file=sys.stderr)
         return 1
-    print(f"Skill packaging {args.command} passed: {args.output.resolve()}")
+    print(f"Skill packaging {args.command} passed: {target}")
     return 0
 
 

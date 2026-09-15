@@ -2,7 +2,16 @@
 
 All notable user-facing changes to RPA Core Agent Skills will be recorded here.
 
-## 0.1.0 - prepared 2026-09-14
+## 0.1.1 - prepared 2026-09-14
+
+### Fixed
+
+- Store normalized ZIP members without DEFLATE compression so Windows and
+  Linux rebuild the same archive, inventory, and checksum bytes. Version 0.1.0
+  assets and payload hashes remain intact, but its post-publication Linux
+  byte-rebuild gate exposed platform-dependent zlib output.
+
+## 0.1.0 - 2026-09-14
 
 ### Added
 

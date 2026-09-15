@@ -7,10 +7,12 @@ installation or use.
 
 ## Supported versions
 
-The stable companion line begins with `v0.1.0`. It is supported only after the
-immutable public release is visible; default-branch snapshots and development
-builds are not supported releases. Report issues against the exact tag and
-installed artifact digest whenever possible.
+The stable companion line begins with `v0.1.0`. Version `v0.1.0` remains
+immutable but is superseded because its cross-platform post-publication byte
+rebuild did not pass. Version `v0.1.1` becomes the supported release only after
+its immutable public assets pass that Windows/Linux gate; default-branch
+snapshots and development builds are not supported releases. Report issues
+against the exact tag and installed artifact digest whenever possible.
 
 ## Reporting a vulnerability
 

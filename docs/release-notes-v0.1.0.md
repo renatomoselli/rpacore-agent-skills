@@ -4,6 +4,13 @@ The first stable RPA Core Agent Skills release provides seven portable,
 self-contained skills for designing, setting up, testing, diagnosing, and
 recovering Python automations built with RPA Core 0.3.0.
 
+## Post-release note
+
+The published assets and payload hashes passed integrity checks, but the Linux
+post-publication job could not reproduce the Windows-built DEFLATE ZIP bytes.
+The immutable release remains unchanged. Version 0.1.1 replaces DEFLATE with
+stored ZIP members and repeats the complete cross-platform release sequence.
+
 ## Included
 
 - A full seven-skill portable ZIP and seven individual-skill ZIPs.

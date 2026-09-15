@@ -10,6 +10,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+import zipfile
 
 from tests.support import make_git_source
 
@@ -34,7 +35,7 @@ class PackageCliTests(unittest.TestCase):
             capture_output=True,
             text=True,
         ).stdout
-        self.assertIn("{build,check}", top)
+        self.assertIn("{build,check,compare}", top)
         self.assertNotIn("publish", top.casefold())
         for option in ("--repo-root", "--profile", "--output", "--frozen"):
             self.assertIn(option, build)
@@ -163,6 +164,56 @@ class DistributionTests(unittest.TestCase):
         first = self.build("first")
         second = self.build("second")
         self.assertEqual(PACKAGER._output_files(first), PACKAGER._output_files(second))
+
+    def test_archives_use_platform_independent_stored_members(self) -> None:
+        output = self.build()
+        for path in (output / "archives").iterdir():
+            with self.subTest(archive=path.name), zipfile.ZipFile(path) as archive:
+                members = archive.infolist()
+                self.assertTrue(members)
+                self.assertEqual(
+                    {member.compress_type for member in members},
+                    {zipfile.ZIP_STORED},
+                )
+
+    def test_cross_platform_candidates_compare_equal(self) -> None:
+        first = self.build("first")
+        second = self.build("second")
+        hashes = PACKAGER.compare(self.source, first, second)
+        self.assertEqual(len(hashes), len(PACKAGER.release_asset_paths(
+            PACKAGER.validate_repository(self.source)
+        )))
+        self.assertEqual(
+            set(hashes),
+            {
+                "archives/rpacore-agent-skills-portable.zip",
+                "release-inventory.json",
+                "release-inventory.sha256",
+            } | {
+                f"archives/{entry['name']}.zip"
+                for entry in PACKAGER.validate_repository(self.source)["skills"]
+            },
+        )
+
+    def test_tampered_archive_fails_compare_naming_the_file(self) -> None:
+        first = self.build("first")
+        second = self.build("second")
+        archive = second / "archives/rpacore-project-setup.zip"
+        archive.write_bytes(archive.read_bytes() + b" ")
+        with self.assertRaisesRegex(
+            PACKAGER.ValidationError,
+            "release asset hash mismatch.*rpacore-project-setup\\.zip",
+        ):
+            PACKAGER.compare(self.source, first, second)
+
+    def test_missing_asset_fails_compare(self) -> None:
+        first = self.build("first")
+        second = self.build("second")
+        (second / "release-inventory.sha256").unlink()
+        with self.assertRaisesRegex(
+            PACKAGER.ValidationError, "missing release-inventory\\.sha256"
+        ):
+            PACKAGER.compare(self.source, first, second)
 
     def test_tampered_and_missing_resources_are_rejected_without_repair(self) -> None:
         output = self.build("tampered")

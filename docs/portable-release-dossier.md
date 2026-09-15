@@ -1,6 +1,6 @@
 # Portable release dossier
 
-This is the reviewed handoff for preparing the shared portable `v0.1.0`
+This is the reviewed handoff for preparing the corrective portable `v0.1.1`
 release. Stable source identity does not prove that a public release exists.
 This file does not authorize a tag, GitHub release, repository setting or
 metadata change, directory submission, telemetry, profile mutation, or native
@@ -9,7 +9,7 @@ client wrapper.
 ## Frozen identity
 
 - Product: RPA Core Agent Skills, seven skills
-- Companion version/status: `0.1.0`, stable
+- Companion version/status: `0.1.1`, stable
 - License: Apache-2.0; release artifacts include `LICENSE` and `NOTICE`
 - Core: exactly `0.3.0` at
   `493252649ee6b9d387008e6b7ed41908e2733f46`
@@ -21,7 +21,7 @@ client wrapper.
 
 ## Proposed GitHub release
 
-- Tag/title: annotated `v0.1.0`; release title `RPA Core Agent Skills v0.1.0`
+- Tag/title: annotated `v0.1.1`; release title `RPA Core Agent Skills v0.1.1`
 - Target: the future clean release-source commit embedded in the final frozen
   inventory; never mutable branch state
 - Description: `Portable agent skills for building reliable Python automations with RPA Core.`
@@ -30,7 +30,7 @@ client wrapper.
 - Listing-triggering topic, authorized separately: `agent-skills`
 - Support: public issues and the private vulnerability-reporting route in
   `SECURITY.md`
-- Notes: `docs/release-notes-v0.1.0.md`
+- Notes: `docs/release-notes-v0.1.1.md`
 
 The ten allowlisted assets are `rpacore-agent-skills-portable.zip`, the seven
 manifest-named individual skill ZIPs, `release-inventory.json`, and
@@ -40,9 +40,12 @@ draft with all assets, and leave that draft inspectable before publication.
 
 Before publication, a failed candidate is discarded and rebuilt from a new
 clean commit; removal of any draft or tag is a separately authorized action.
-After publication, never replace `v0.1.0`, its tag, or its assets. Publish a
-corrected later version and record the supersession through release notes,
-issues, or a security advisory as appropriate.
+The immutable `v0.1.0` tag and assets remain untouched. Their hashes and
+payloads passed verification, but Linux could not reproduce the Windows-built
+DEFLATE archive bytes. Version `v0.1.1` changes archive members to `ZIP_STORED`
+and must pass the complete release sequence again. After publication, never
+replace either release, tag, or asset set; publish another corrected version if
+needed.
 
 ## Release description
 
@@ -58,9 +61,9 @@ recovery, diagnostics, reporting, testing.
 
 | Surface | Status | Required evidence before support claim |
 | --- | --- | --- |
-| Portable folders and ZIPs | development candidate passed; stable candidate pending | Clean stable-source commit validation, tests, deterministic build, and non-repairing check pass on both hosted platforms |
-| Exact Core consumer | development candidate passed; stable candidate pending | Repeat all five installed-wheel scenarios from the exact Core baseline on both hosted platforms |
-| Direct immutable Git copy | partial | Isolated local Git source used; immutable public commit install and full upgrade/downgrade lifecycle remain |
+| Portable folders and ZIPs | `v0.1.0` payload integrity passed; Linux byte rebuild failed; `v0.1.1` pending | Stored-archive clean commit, deterministic build, and non-repairing check pass on both hosted platforms |
+| Exact Core consumer | `v0.1.0` source CI passed; `v0.1.1` rerun pending | Repeat all five installed-wheel scenarios from the exact Core baseline on both hosted platforms |
+| Direct immutable Git copy | `v0.1.0` public; `v0.1.1` pending | Verify the corrected immutable public commit install and retain lifecycle boundaries |
 | Skills CLI 1.5.25 | failed | Telemetry-disabled fresh/list/repeat/remove passed, but repeat copy silently overwrote a modified skill; update had no local project entry |
 | OpenCode 1.14.30 discovery | Windows passed | All seven installed folders discovered from isolated `.agents/skills`; Linux remains unrun |
 | OpenCode behavior | unverified | Configured model passes the bounded development, recovery, inspection, and negative-control cases |
@@ -88,7 +91,7 @@ on Windows and Ubuntu.
 ## Release checklist
 
 1. Select a clean stable companion commit and rerun static, test, `build --frozen`,
-   `check --frozen`, exact-Core, installed-wheel, Windows, and Linux gates.
+   `check --frozen`, cross-platform ten-asset `compare`, exact-Core, installed-wheel, Windows, and Linux gates.
 2. Record the inventory and archive digests plus the client/OS commands and
    transcripts. Confirm cached local resources remain readable offline.
 3. Confirm owner, initial release version, immutable tag, publisher coordinates,

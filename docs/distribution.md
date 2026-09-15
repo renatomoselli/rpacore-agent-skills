@@ -1,7 +1,7 @@
 # Portable distribution
 
-This repository has stable source identity `0.1.0`. Publication is a separate
-fact: the supported public channel exists only when the immutable `v0.1.0`
+This repository has stable source identity `0.1.1`. Publication is a separate
+fact: the supported public channel exists only when the immutable `v0.1.1`
 entry on the
 [GitHub releases page](https://github.com/renatomoselli/rpacore-agent-skills/releases)
 and its ten allowlisted assets are visible. The package commands here only
@@ -14,9 +14,9 @@ Use GitHub CLI to download the full portable archive and its inventory into a
 new explicit directory:
 
 ```powershell
-$release = "validation-artifacts/rpacore-agent-skills-v0.1.0"
+$release = "validation-artifacts/rpacore-agent-skills-v0.1.1"
 New-Item -ItemType Directory -Path $release
-gh release download v0.1.0 -R renatomoselli/rpacore-agent-skills -D $release `
+gh release download v0.1.1 -R renatomoselli/rpacore-agent-skills -D $release `
   -p rpacore-agent-skills-portable.zip `
   -p release-inventory.json `
   -p release-inventory.sha256
@@ -48,8 +48,8 @@ injects source-tracking frontmatter, so its installed bytes intentionally
 differ from the canonical archives:
 
 ```powershell
-gh skill preview renatomoselli/rpacore-agent-skills rpacore-project-setup@v0.1.0
-gh skill install renatomoselli/rpacore-agent-skills --all --pin v0.1.0 --dir <disposable-directory>
+gh skill preview renatomoselli/rpacore-agent-skills rpacore-project-setup@v0.1.1
+gh skill install renatomoselli/rpacore-agent-skills --all --pin v0.1.1 --dir <disposable-directory>
 ```
 
 Keep this preview route in a disposable explicit directory until its behavior
@@ -66,7 +66,9 @@ python scripts/package_skills.py check --repo-root . --profile portable --output
 ```
 
 The output contains a complete seven-skill pack, seven individual folders,
-normalized ZIP archives, a schema-versioned inventory, and its SHA-256 file.
+normalized ZIP archives with platform-independent stored members, a
+schema-versioned inventory, and its SHA-256 file. Stored members intentionally
+trade compression for byte-identical Windows/Linux rebuilds.
 `build` refuses to replace an existing output. Choose another output path or,
 after inspecting the exact old output, remove that directory explicitly before
 retrying, for example:

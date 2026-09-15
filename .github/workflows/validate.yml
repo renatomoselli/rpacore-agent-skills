@@ -36,6 +36,40 @@ jobs:
           python scripts/package_skills.py build --repo-root . --profile portable --output validation-artifacts/portable --frozen
           python scripts/package_skills.py check --repo-root . --profile portable --output validation-artifacts/portable --frozen
 
+      - name: Upload portable candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: portable-${{ matrix.os }}
+          path: validation-artifacts/portable
+          if-no-files-found: error
+
+  cross-platform-assets:
+    needs: portable-skills
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Download Windows candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: portable-windows-latest
+          path: validation-artifacts/portable-windows
+
+      - name: Download Ubuntu candidate
+        uses: actions/download-artifact@v4
+        with:
+          name: portable-ubuntu-latest
+          path: validation-artifacts/portable-ubuntu
+
+      - name: Compare all ten release asset hashes
+        run: python scripts/package_skills.py compare --repo-root . --profile portable --first validation-artifacts/portable-windows --second validation-artifacts/portable-ubuntu
+
   pinned-core-baseline:
     runs-on: ${{ matrix.os }}
     strategy:

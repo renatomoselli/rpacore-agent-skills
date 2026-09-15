@@ -97,8 +97,9 @@ The repository's independent machine-readable contracts are:
 Use `scripts/package_skills.py build` with the explicit `portable` profile,
 `--frozen`, and a new output directory, then use `check --frozen` against the
 same source and output.
-The build contains a full pack, individual folders, deterministic archives, a
-complete payload/artifact inventory, and an adjacent inventory checksum. The
+The build contains a full pack, individual folders, deterministic archives
+using platform-independent stored ZIP members, a complete payload/artifact
+inventory, and an adjacent inventory checksum. The
 inventory also identifies the manifest, validator, transaction helper,
 shared repository-path policy, packager, license, notice, and installation
 guide inputs. `check` builds an independent expectation and does not repair
@@ -108,7 +109,10 @@ A frozen build requires a HEAD-clean source, including no non-ignored untracked
 files, before producing an output. Commit first; then run the frozen build and
 check. Omit `--frozen` only for development checks; those builds record
 `working_tree_dirty: true` and cannot be release input. Run twice into different
-directories and compare all bytes. See
+directories and compare all bytes. Before publication, build frozen candidates
+on both Windows and Linux and require `package_skills.py compare` to agree on
+all ten release asset hashes; same-platform rebuilds cannot catch
+platform-dependent archive bytes. See
 `distribution.md` for isolated client rehearsal, conflict handling, and the
 support boundary.
 
