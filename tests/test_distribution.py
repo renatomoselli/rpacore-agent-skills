@@ -318,6 +318,23 @@ class ArchiveSafetyTests(unittest.TestCase):
             },
         )
 
+    def test_zip_members_use_platform_independent_string_order(self) -> None:
+        (self.source / "SKILL.md").write_text(
+            "instructions\n", encoding="utf-8", newline="\n"
+        )
+        references = self.source / "references"
+        references.mkdir()
+        (references / "compatibility.json").write_text(
+            "{}\n", encoding="utf-8", newline="\n"
+        )
+        destination = self.root / "archives" / "ordered.zip"
+
+        PACKAGER._write_zip(self.source, destination, "skill")
+
+        with zipfile.ZipFile(destination) as archive:
+            names = archive.namelist()
+        self.assertEqual(names, sorted(names))
+
     def test_file_hashes_rejects_mocked_symlink_without_privilege(self) -> None:
         payload = self.source / "nested/payload.txt"
         with patch.object(

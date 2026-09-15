@@ -117,7 +117,9 @@ def _iter_files(root: Path, relative_root: str | None = None) -> Iterator[tuple[
     base = root if relative_root is None else root / relative_root
     if base.is_symlink() or not base.is_dir():
         raise ValidationError(f"package output must be a real directory: {base}")
-    for path in sorted(base.rglob("*")):
+    for path in sorted(
+        base.rglob("*"), key=lambda candidate: candidate.relative_to(root).as_posix()
+    ):
         if path.is_symlink():
             raise ValidationError(f"package output must not contain symlinks: {path}")
         if path.is_file():
