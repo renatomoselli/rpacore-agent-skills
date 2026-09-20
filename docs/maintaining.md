@@ -92,6 +92,37 @@ The repository's independent machine-readable contracts are:
 | Release inventory | 1 | Rebuild with the matching packager revision |
 | Consumer receipt | 2 | Schema-1 evidence is superseded and cannot be rechecked |
 
+## Run the local cross-platform preflight
+
+Before committing a release-affecting change on a Windows host, use the current
+working tree for both the native Windows and WSL/Linux gates:
+
+```powershell
+python scripts/preflight_ci.py --repo-root . --core-repo ../rpacore --wsl-distribution Ubuntu
+```
+
+The Core checkout must already be at the exact commit selected by
+`manifest.toml`. The command makes two disposable local clones of that checkout
+so ignored build residue cannot enter either platform's wheel. It does not
+download a repository, install WSL, change Git or WSL configuration, create a
+commit, or contact GitHub. It runs the existing validation, unittest, portable
+build/check, and exact-Core consumer commands on both platforms. The baseline
+verifier creates isolated virtual environments and may need the configured
+package index or cache for its pinned build/test tools.
+
+The two portable builds deliberately omit `--frozen`: an uncommitted tree is
+the input being tested, and both inventories must report that dirty state
+truthfully. The runner fingerprints tracked, staged, and non-ignored untracked
+files around every child command, then compares the eight archives, inventory,
+and inventory checksum. It fails if the source changes during the run.
+
+By default all candidates and baseline environments use a disposable temporary
+directory. Pass `--output-root` with a new path outside both repositories to
+retain diagnostics. Missing WSL, Linux Python, or Core prerequisites fail the
+command rather than becoming skips. A pass is early fault-discovery evidence,
+not a frozen release identity: commit the reviewed change afterward and still
+require the hosted Windows/Ubuntu workflow.
+
 ## Build portable candidates
 
 Use `scripts/package_skills.py build` with the explicit `portable` profile,

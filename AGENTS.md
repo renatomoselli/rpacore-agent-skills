@@ -18,6 +18,8 @@ These rules apply repository-wide.
 7. Run focused tests, then:
 
    ```powershell
+   # For release-affecting changes on Windows:
+   python scripts\preflight_ci.py --repo-root . --core-repo ../rpacore --wsl-distribution Ubuntu
    python scripts\validate_skills.py --repo-root .
    python -m unittest discover -s tests -v
    git diff --check

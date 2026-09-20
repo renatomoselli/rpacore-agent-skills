@@ -32,14 +32,15 @@ install or upgrade RPA Core.
 
 ## Why v0.1.1?
 
-Version 0.1.0 was published, but its final Linux verification found that
-compressed ZIP files did not rebuild byte-for-byte on Linux the way they did
-on Windows. The downloads themselves were intact, but the release did not meet
-our cross-platform reproducibility requirement.
+Version 0.1.0 was published, but its final Linux verification found that the
+ZIP files did not rebuild byte-for-byte on Linux the way they did on Windows.
+The downloads themselves were intact, but differences in compression and file
+ordering meant the release did not meet our cross-platform reproducibility
+requirement.
 
-Version 0.1.1 stores the ZIP contents without compression, removing that
-platform difference. The downloads are slightly larger; the seven skill
-instructions and their behavior are unchanged.
+Version 0.1.1 stores the ZIP contents without compression and uses the same
+explicit file order on every platform. The downloads are slightly larger; the
+seven skill instructions and their behavior are unchanged.
 
 The immutable v0.1.0 release remains available as part of the project's
 history, but v0.1.1 is the version to install.

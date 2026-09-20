@@ -10,8 +10,8 @@ exactly 0.3.0; later versions need their own validation.
 
 Publication is tracked separately from source identity. The immutable `v0.1.0`
 assets remain intact, but their post-publication Linux rebuild exposed
-platform-dependent DEFLATE output. The supported public channel becomes
-`v0.1.1` on the
+platform-dependent ZIP compression and member ordering. The supported public
+channel becomes `v0.1.1` on the
 [GitHub releases page](https://github.com/renatomoselli/rpacore-agent-skills/releases)
 only after it and its ten documented assets pass both hosted platforms. Until
 then, do not substitute default-branch HEAD or GitHub-generated source archives.
@@ -77,6 +77,18 @@ python scripts/validate_skills.py --repo-root .
 python -m unittest discover -s tests -v
 git diff --check
 ```
+
+Before committing a release-affecting change on Windows, run the same release
+checks against the current working tree through native Windows and WSL/Linux:
+
+```powershell
+python scripts/preflight_ci.py --repo-root . --core-repo ../rpacore --wsl-distribution Ubuntu
+```
+
+This command expects a local Core checkout at the exact manifest commit. It
+does not commit, push, publish, or change either repository. A passing local
+preflight catches platform differences early; the clean-commit hosted workflow
+is still required before release.
 
 After reviewing a skill edit, regenerate only its manifest hash:
 

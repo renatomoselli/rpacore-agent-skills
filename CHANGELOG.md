@@ -4,12 +4,20 @@ All notable user-facing changes to RPA Core Agent Skills will be recorded here.
 
 ## 0.1.1 - prepared 2026-09-14
 
+### Added
+
+- Add a local Windows plus WSL/Linux pre-commit gate that runs the existing
+  release checks against one uncommitted tree and compares all ten portable
+  release assets before hosted CI.
+
 ### Fixed
 
 - Store normalized ZIP members without DEFLATE compression so Windows and
   Linux rebuild the same archive, inventory, and checksum bytes. Version 0.1.0
   assets and payload hashes remain intact, but its post-publication Linux
   byte-rebuild gate exposed platform-dependent zlib output.
+- Sort archive members by explicit POSIX path strings so Windows and Linux use
+  the same member order.
 
 ## 0.1.0 - 2026-09-14
 

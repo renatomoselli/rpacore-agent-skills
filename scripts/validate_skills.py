@@ -65,6 +65,7 @@ PACKAGING_INPUTS = (
     "docs/distribution.md",
     "scripts/file_transaction.py",
     "scripts/package_skills.py",
+    "scripts/preflight_ci.py",
     "scripts/repository_paths.py",
     "scripts/validate_skills.py",
 )

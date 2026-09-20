@@ -42,8 +42,9 @@ Before publication, a failed candidate is discarded and rebuilt from a new
 clean commit; removal of any draft or tag is a separately authorized action.
 The immutable `v0.1.0` tag and assets remain untouched. Their hashes and
 payloads passed verification, but Linux could not reproduce the Windows-built
-DEFLATE archive bytes. Version `v0.1.1` changes archive members to `ZIP_STORED`
-and must pass the complete release sequence again. After publication, never
+DEFLATE archive bytes or Windows member order. Version `v0.1.1` uses
+`ZIP_STORED` and explicit POSIX-string ordering, and must pass the complete
+release sequence again. After publication, never
 replace either release, tag, or asset set; publish another corrected version if
 needed.
 
@@ -90,8 +91,11 @@ on Windows and Ubuntu.
 
 ## Release checklist
 
-1. Select a clean stable companion commit and rerun static, test, `build --frozen`,
-   `check --frozen`, cross-platform ten-asset `compare`, exact-Core, installed-wheel, Windows, and Linux gates.
+1. Before committing, run `preflight_ci.py` against the current tree and require
+   its native Windows/WSL ten-asset comparison to pass. Then select a clean
+   stable companion commit and rerun static, test, `build --frozen`,
+   `check --frozen`, cross-platform ten-asset `compare`, exact-Core,
+   installed-wheel, Windows, and Linux hosted gates.
 2. Record the inventory and archive digests plus the client/OS commands and
    transcripts. Confirm cached local resources remain readable offline.
 3. Confirm owner, initial release version, immutable tag, publisher coordinates,
